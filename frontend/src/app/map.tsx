@@ -1,1234 +1,574 @@
-// import { useEffect, useState } from 'react';
-// import { View, Text, StyleSheet, Platform, TouchableOpacity, TextInput, Modal, Alert, Image, ActivityIndicator } from 'react-native';
-// import { useAuth } from '../context/AuthContext';
-
-// const API = 'http://127.0.0.1:8000';
-
-// const CATEGORIES = [
-//   { id: 'plastic', label: '🧴 Plastic', color: '#3b82f6' },
-//   { id: 'food', label: '🍱 Food waste', color: '#f59e0b' },
-//   { id: 'hazardous', label: '☢️ Hazardous', color: '#ef4444' },
-//   { id: 'general', label: '🗑️ General', color: '#888' },
-// ];
-
-// function WebMap({ token, onReportRequest }: { token: string, onReportRequest: (lat: number, lng: number) => void }) {
-//   useEffect(() => {
-//     if (Platform.OS !== 'web') return;
-//     if ((window as any)._mapInitialized) return;
-
-//     const startMap = async () => {
-//       const L = (window as any).L;
-//       const map = L.map('map').setView([20.5937, 78.9629], 5);
-//       (window as any)._map = map;
-//       (window as any)._L = L;
-//       (window as any)._userLat = 0;
-//       (window as any)._userLng = 0;
-//       (window as any)._routeLayer = null;
-
-//       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-//         attribution: '© OpenStreetMap'
-//       }).addTo(map);
-
-//       const makeIcon = (emoji: string, size = 28) => L.divIcon({
-//         html: `<div style="font-size:${size}px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4))">${emoji}</div>`,
-//         className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2]
-//       });
-
-//       navigator.geolocation.getCurrentPosition(async (pos) => {
-//         const { latitude: lat, longitude: lng } = pos.coords;
-//         (window as any)._userLat = lat;
-//         (window as any)._userLng = lng;
-//         map.setView([lat, lng], 14);
-
-//         // User location
-//         L.marker([lat, lng], { icon: makeIcon('📍', 32) })
-//           .addTo(map)
-//           .bindPopup('<b>📍 You are here</b>');
-
-//         // Feature 1: AQI heatmap
-//         try {
-//           const aqiRes = await fetch(`${API}/map/aqi?lat=${lat}&lng=${lng}`, {
-//             headers: { Authorization: `Bearer ${token}` }
-//           });
-//           const aqiData = await aqiRes.json();
-//           if (aqiData.results) {
-//             aqiData.results.forEach((station: any) => {
-//               if (!station.coordinates) return;
-//               const val = station.parameters?.[0]?.lastValue || 0;
-//               const color = val < 50 ? '#22c55e' : val < 100 ? '#f59e0b' : val < 150 ? '#f97316' : '#ef4444';
-//               const label = val < 50 ? 'Good' : val < 100 ? 'Moderate' : val < 150 ? 'Unhealthy' : 'Hazardous';
-//               L.circle([station.coordinates.latitude, station.coordinates.longitude], {
-//                 color, fillColor: color, fillOpacity: 0.3, radius: 3000, weight: 1.5
-//               }).addTo(map).bindPopup(
-//                 `<div style="min-width:180px">
-//                   <b>🌫️ AQI Station</b><br/>${station.name}<br/>
-//                   AQI: <b style="color:${color}">${Math.round(val)} — ${label}</b><br/>
-//                   <small>Source: OpenAQ</small>
-//                 </div>`
-//               );
-//             });
-//           }
-//         } catch (e) { console.log('AQI error:', e); }
-
-//         // Feature 2: Water quality zones
-//         try {
-//           const wRes = await fetch(`${API}/map/aqi?lat=${lat}&lng=${lng}`, {
-//             headers: { Authorization: `Bearer ${token}` }
-//           });
-//           const wData = await wRes.json();
-//           if (wData.results) {
-//             wData.results.slice(0, 3).forEach((s: any, i: number) => {
-//               if (!s.coordinates) return;
-//               const offset = (i + 1) * 0.012;
-//               L.circle([s.coordinates.latitude + offset, s.coordinates.longitude], {
-//                 color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.18,
-//                 radius: 1500, weight: 1, dashArray: '4,4'
-//               }).addTo(map).bindPopup(
-//                 `<div style="min-width:180px">
-//                   <b>💧 Water Quality Zone</b><br/>Near ${s.name}<br/>
-//                   Status: <b style="color:#3b82f6">Monitoring Active</b>
-//                 </div>`
-//               );
-//             });
-//           }
-//         } catch (e) { console.log('Water error:', e); }
-
-//         // Feature 3: Waste report pins
-//         try {
-//           const repRes = await fetch(`${API}/reports/`, {
-//             headers: { Authorization: `Bearer ${token}` }
-//           });
-//           const reports = await repRes.json();
-//           if (Array.isArray(reports)) {
-//             reports.forEach((r: any) => {
-//               if (!r.location?.lat || !r.location?.lng) return;
-//               const statusColor = r.status === 'resolved' ? '#22c55e' : r.status === 'approved' ? '#3b82f6' : '#f59e0b';
-//               const catIcon = r.category === 'plastic' ? '🧴' : r.category === 'hazardous' ? '☢️' : r.category === 'food' ? '🍱' : '🗑️';
-//               L.marker([r.location.lat, r.location.lng], { icon: makeIcon(catIcon) })
-//                 .addTo(map)
-//                 .bindPopup(
-//                   `<div style="min-width:180px">
-//                     <b>${catIcon} ${r.title}</b><br/>
-//                     Category: ${r.category || 'general'}<br/>
-//                     Status: <b style="color:${statusColor}">${r.status}</b><br/>
-//                     ${r.description || ''}
-//                   </div>`
-//                 );
-//             });
-//           }
-//         } catch (e) { console.log('Reports error:', e); }
-
-//         // Feature 4: Crowd density heatmap
-//         const crowdZones = [
-//           { lat: lat + 0.008, lng: lng + 0.006, density: 0.9, name: 'Market Area', crowd: 'Very High' },
-//           { lat: lat - 0.006, lng: lng + 0.012, density: 0.5, name: 'Park Zone', crowd: 'Moderate' },
-//           { lat: lat + 0.014, lng: lng - 0.008, density: 0.3, name: 'Residential', crowd: 'Low' },
-//           { lat: lat - 0.012, lng: lng - 0.010, density: 0.8, name: 'Bus Stand', crowd: 'High' },
-//           { lat: lat + 0.002, lng: lng + 0.018, density: 0.6, name: 'Temple Area', crowd: 'Moderate-High' },
-//         ];
-//         crowdZones.forEach(z => {
-//           const color = z.density > 0.7 ? '#ef4444' : z.density > 0.4 ? '#f59e0b' : '#22c55e';
-//           const wasteRisk = z.density > 0.7 ? 'High waste risk' : z.density > 0.4 ? 'Moderate' : 'Low';
-//           L.circle([z.lat, z.lng], {
-//             color, fillColor: color,
-//             fillOpacity: 0.15 + z.density * 0.15,
-//             radius: 600 + z.density * 600, weight: 1
-//           }).addTo(map).bindPopup(
-//             `<div style="min-width:180px">
-//               <b>👥 ${z.name}</b><br/>
-//               Density: <b style="color:${color}">${z.crowd}</b><br/>
-//               Waste prediction: <b>${wasteRisk}</b><br/>
-//               <small>Based on historical patterns</small>
-//             </div>`
-//           );
-//         });
-
-//         // Feature 5: Eco points with Get Route
-//         const ecoPoints = [
-//           { lat: lat + 0.018, lng: lng + 0.020, icon: '♻️', name: 'Recycling Center', desc: 'Drop off recyclables', dist: '2.1 km' },
-//           { lat: lat - 0.015, lng: lng + 0.025, icon: '🌳', name: 'Community Garden', desc: 'Join local gardening', dist: '2.8 km' },
-//           { lat: lat + 0.025, lng: lng - 0.015, icon: '⚡', name: 'EV Charging Station', desc: 'Electric vehicle charging', dist: '3.2 km' },
-//           { lat: lat - 0.020, lng: lng - 0.022, icon: '🚰', name: 'Clean Water Station', desc: 'Safe drinking water', dist: '1.8 km' },
-//           { lat: lat + 0.010, lng: lng - 0.030, icon: '🚻', name: 'Public Toilet', desc: 'Sanitation facility', dist: '1.2 km' },
-//           { lat: lat - 0.005, lng: lng + 0.035, icon: '🌿', name: 'Eco Vendor', desc: 'Zero waste food stall', dist: '3.5 km' },
-//         ];
-//         ecoPoints.forEach(p => {
-//           L.marker([p.lat, p.lng], { icon: makeIcon(p.icon) })
-//             .addTo(map)
-//             .bindPopup(
-//               `<div style="min-width:200px">
-//                 <b>${p.icon} ${p.name}</b><br/>
-//                 ${p.desc}<br/>Distance: <b>${p.dist}</b><br/>
-//                 <button onclick="window.getRoute(${p.lat}, ${p.lng}, '${p.name}')"
-//                   style="margin-top:8px;padding:5px 12px;background:#22c55e;color:white;border:none;
-//                   border-radius:8px;cursor:pointer;font-size:12px;font-weight:bold;width:100%">
-//                   🗺️ Get Walking Route
-//                 </button>
-//               </div>`
-//             );
-//         });
-
-//         // Feature 6: Sustainability score zones
-//         const scoreZones = [
-//           { lat: lat + 0.035, lng: lng + 0.035, score: 82, name: 'North Zone', aqi: 35, waste: 'Low', crowd: 'Low' },
-//           { lat: lat - 0.035, lng: lng - 0.035, score: 38, name: 'South Zone', aqi: 145, waste: 'High', crowd: 'High' },
-//           { lat: lat + 0.035, lng: lng - 0.035, score: 65, name: 'West Zone', aqi: 72, waste: 'Medium', crowd: 'Medium' },
-//           { lat: lat - 0.035, lng: lng + 0.035, score: 24, name: 'East Zone', aqi: 180, waste: 'Very High', crowd: 'Very High' },
-//           { lat: lat, lng: lng + 0.048, score: 71, name: 'Central Zone', aqi: 55, waste: 'Low', crowd: 'High' },
-//         ];
-//         scoreZones.forEach(z => {
-//           const color = z.score > 70 ? '#22c55e' : z.score > 40 ? '#f59e0b' : '#ef4444';
-//           const status = z.score > 70 ? 'Green' : z.score > 40 ? 'Moderate' : 'Critical';
-//           const emoji = z.score > 70 ? '🟢' : z.score > 40 ? '🟡' : '🔴';
-//           L.circle([z.lat, z.lng], {
-//             color, fillColor: color, fillOpacity: 0.12,
-//             radius: 2200, weight: 2, dashArray: '8,5'
-//           }).addTo(map).bindPopup(
-//             `<div style="min-width:210px">
-//               <b>${emoji} ${z.name}</b><br/>
-//               <span style="font-size:20px;color:${color}"><b>${z.score}/100</b></span> — <b>${status}</b><br/>
-//               <hr style="margin:5px 0;border-color:#ddd"/>
-//               🌫️ AQI: <b>${z.aqi}</b> &nbsp;|&nbsp; 🗑️ Waste: <b>${z.waste}</b><br/>
-//               👥 Crowd: <b>${z.crowd}</b>
-//             </div>`
-//           );
-//         });
-
-//         // Feature 8: Smart walking route via backend
-//         (window as any).getRoute = async (destLat: number, destLng: number, name: string) => {
-//           const userLat = (window as any)._userLat;
-//           const userLng = (window as any)._userLng;
-
-//           if ((window as any)._routeLayer) {
-//             map.removeLayer((window as any)._routeLayer);
-//             (window as any)._routeLayer = null;
-//           }
-
-//           L.popup()
-//             .setLatLng([destLat, destLng])
-//             .setContent('<b>🔄 Calculating route...</b>')
-//             .openOn(map);
-
-//           try {
-//             const routeRes = await fetch(
-//               `${API}/map/route?startLng=${userLng}&startLat=${userLat}&endLng=${destLng}&endLat=${destLat}`,
-//               { headers: { Authorization: `Bearer ${token}` } }
-//             );
-//             const routeData = await routeRes.json();
-//             const coords = routeData.features?.[0]?.geometry?.coordinates;
-
-//             if (coords && coords.length > 0) {
-//               const latlngs = coords.map((c: any) => [c[1], c[0]]);
-//               const routeLayer = L.polyline(latlngs, {
-//                 color: '#22c55e', weight: 5, opacity: 0.85, dashArray: '10,5'
-//               }).addTo(map);
-//               (window as any)._routeLayer = routeLayer;
-
-//               const seg = routeData.features[0].properties.segments[0];
-//               const km = (seg.distance / 1000).toFixed(1);
-//               const mins = Math.round(seg.duration / 60);
-
-//               routeLayer.bindPopup(
-//                 `<div style="min-width:180px">
-//                   <b>🟢 Route to ${name}</b><br/>
-//                   📏 Distance: <b>${km} km</b><br/>
-//                   ⏱️ Walking: <b>${mins} mins</b><br/>
-//                   <small style="color:#22c55e">Least polluted path</small><br/>
-//                   <button onclick="window._map.removeLayer(window._routeLayer);window._routeLayer=null;"
-//                     style="margin-top:6px;padding:4px 10px;background:#ef4444;color:white;
-//                     border:none;border-radius:6px;cursor:pointer;font-size:12px">
-//                     ✕ Clear Route
-//                   </button>
-//                 </div>`
-//               ).openPopup();
-
-//               map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-//             } else {
-//               map.closePopup();
-//               alert('Could not calculate route to ' + name);
-//             }
-//           } catch (e) {
-//             console.log('Route error:', e);
-//             map.closePopup();
-//             alert('Route failed. Check ORS_API_KEY in backend .env');
-//           }
-//         };
-
-//         // Click map to report waste
-//         map.on('click', (e: any) => {
-//           L.popup()
-//             .setLatLng(e.latlng)
-//             .setContent(
-//               `<div style="min-width:190px">
-//                 <b>🗑️ Report waste here?</b><br/>
-//                 <small style="color:#888">${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</small><br/>
-//                 <button onclick="window._onReportRequest(${e.latlng.lat}, ${e.latlng.lng})"
-//                   style="margin-top:8px;padding:7px 16px;background:#ef4444;color:white;border:none;
-//                   border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;width:100%">
-//                   🚨 Report Waste Here
-//                 </button>
-//               </div>`
-//             )
-//             .openOn(map);
-//         });
-
-//         // Bridge: Leaflet button → React Native modal
-//         (window as any)._onReportRequest = (lat: number, lng: number) => {
-//           onReportRequest(lat, lng);
-//           map.closePopup();
-//         };
-
-//       }, (err) => {
-//         console.log('Geolocation error:', err);
-//       });
-//     }; // end startMap
-
-//     // Poll every 50ms until div#map exists, then initialize
-//     const tryInit = setInterval(() => {
-//       if (!document.getElementById('map')) return;
-//       clearInterval(tryInit);
-//       (window as any)._mapInitialized = true;
-
-//       const link = document.createElement('link');
-//       link.rel = 'stylesheet';
-//       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-//       document.head.appendChild(link);
-
-//       if (document.getElementById('leaflet-script')) {
-//         startMap();
-//         return;
-//       }
-
-//       const script = document.createElement('script');
-//       script.id = 'leaflet-script';
-//       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-//       script.onload = startMap;
-//       document.head.appendChild(script);
-//     }, 50);
-
-//     return () => clearInterval(tryInit);
-//   }, []);
-
-//   return (
-//     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-//       <div id="map" style={{ width: '100%', height: '100%' }} />
-//       <div style={{
-//         position: 'absolute', bottom: 20, right: 10, zIndex: 1000,
-//         background: 'rgba(15,15,15,0.92)', borderRadius: 12, padding: '10px 14px',
-//         fontSize: 11, color: '#fff', border: '1px solid #333', maxWidth: 170, lineHeight: '1.8'
-//       }}>
-//         <div style={{ fontWeight: 'bold', marginBottom: 5, color: '#22c55e', fontSize: 12 }}>Map Layers</div>
-//         <div>🟢 Green zone (70+)</div>
-//         <div>🟡 Moderate (40–70)</div>
-//         <div>🔴 Critical (&lt;40)</div>
-//         <div style={{ marginTop: 5, borderTop: '1px solid #333', paddingTop: 5, color: '#aaa' }}>
-//           <div>Filled = AQI / crowd</div>
-//           <div>Dashed = score zones</div>
-//           <div>Click map = report</div>
-//           <div>Click ♻️ = get route</div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// export default function MapScreen() {
-//   const { user, loading, getValidToken } = useAuth();
-//   const [token, setToken] = useState('');
-//   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-//   const [analyzing, setAnalyzing] = useState(false);
-//   const [reportModal, setReportModal] = useState(false);
-//   const [reportLat, setReportLat] = useState(0);
-//   const [reportLng, setReportLng] = useState(0);
-//   const [title, setTitle] = useState('');
-//   const [description, setDescription] = useState('');
-//   const [category, setCategory] = useState('general');
-//   const [submitting, setSubmitting] = useState(false);
-
-//   useEffect(() => {
-//     getValidToken().then(t => { if (t) setToken(t); });
-//   }, []);
-
-//   if (loading) {
-//     return (
-//       <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
-//         <ActivityIndicator color="#22c55e" size="large" />
-//         <Text style={{ color: '#22c55e', marginTop: 12 }}>Loading map...</Text>
-//       </View>
-//     );
-//   }
-
-//   const handleReportRequest = (lat: number, lng: number) => {
-//     setReportLat(lat);
-//     setReportLng(lng);
-//     setTitle('');
-//     setDescription('');
-//     setCategory('general');
-//     setSelectedImage(null);
-//     setReportModal(true);
-//   };
-
-//   const pickAndAnalyzeImage = () => {
-//     if (Platform.OS !== 'web') return;
-//     const input = document.createElement('input');
-//     input.type = 'file';
-//     input.accept = 'image/*';
-//     input.onchange = async (e: any) => {
-//       const file = e.target.files[0];
-//       if (!file) return;
-
-//       const reader = new FileReader();
-//       reader.onload = (ev) => setSelectedImage(ev.target?.result as string);
-//       reader.readAsDataURL(file);
-
-//       setAnalyzing(true);
-//       try {
-//         const freshToken = await getValidToken();
-//         const formData = new FormData();
-//         formData.append('file', file);
-
-//         const res = await fetch(`${API}/vision/analyze`, {
-//           method: 'POST',
-//           headers: { Authorization: `Bearer ${freshToken}` },
-//           body: formData
-//         });
-
-//         const result = await res.json();
-//         console.log('Vision result:', result);
-
-//         if (result.detected) {
-//           setTitle(result.title || '');
-//           setDescription(result.description || '');
-//           setCategory(result.category || 'general');
-//           Alert.alert(
-//             '🤖 AI Detected!',
-//             `Type: ${result.category}\nSeverity: ${result.severity}\n\nFields auto-filled!`
-//           );
-//         } else {
-//           Alert.alert('No waste detected', 'Please fill in manually.');
-//         }
-//       } catch (err) {
-//         console.log('Vision error:', err);
-//         Alert.alert('Analysis failed', 'Fill in manually.');
-//       } finally {
-//         setAnalyzing(false);
-//       }
-//     };
-//     input.click();
-//   };
-
-//   const submitReport = async () => {
-//     if (!title.trim()) { Alert.alert('Please enter a title'); return; }
-//     setSubmitting(true);
-//     try {
-//       const freshToken = await getValidToken();
-//       const res = await fetch(`${API}/reports/`, {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//           Authorization: `Bearer ${freshToken}`
-//         },
-//         body: JSON.stringify({
-//           title, description, category,
-//           location: { lat: reportLat, lng: reportLng },
-//           data: { reported_via: 'map_click' }
-//         })
-//       });
-//       if (res.ok) {
-//         Alert.alert('✅ Reported!', 'Waste report submitted! Refresh map to see your pin.');
-//         setReportModal(false);
-//         setSelectedImage(null);
-//       } else {
-//         const err = await res.json();
-//         Alert.alert('Error', JSON.stringify(err.detail || err));
-//       }
-//     } catch (e) {
-//       Alert.alert('Error', 'Network error. Is the backend running?');
-//     } finally {
-//       setSubmitting(false);
-//     }
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <View style={styles.header}>
-//         <Text style={styles.headerText}>🗺️ Smart Eco Map</Text>
-//         <Text style={styles.headerSub}>AQI • Reports • Crowd • Routes • AI Vision</Text>
-//       </View>
-
-//       <View style={styles.mapContainer}>
-//         {Platform.OS === 'web'
-//           ? <WebMap token={token} onReportRequest={handleReportRequest} />
-//           : (
-//             <View style={styles.placeholder}>
-//               <Text style={styles.placeholderText}>Map available on web version</Text>
-//             </View>
-//           )}
-//       </View>
-
-//       <Modal
-//         visible={reportModal}
-//         transparent
-//         animationType="slide"
-//         onRequestClose={() => setReportModal(false)}
-//       >
-//         <View style={styles.modalOverlay}>
-//           <View style={styles.modalSheet}>
-//             <View style={styles.modalHandle} />
-//             <Text style={styles.modalTitle}>🗑️ Report Waste</Text>
-//             <Text style={styles.modalCoords}>📍 {reportLat.toFixed(5)}, {reportLng.toFixed(5)}</Text>
-
-//             <TouchableOpacity style={styles.imageUploadBtn} onPress={pickAndAnalyzeImage} disabled={analyzing}>
-//               <Text style={styles.imageUploadText}>
-//                 {analyzing ? '🤖 AI Analyzing...' : '📷 Upload Photo — AI auto-detects waste'}
-//               </Text>
-//             </TouchableOpacity>
-
-//             {analyzing && (
-//               <View style={{ alignItems: 'center', marginBottom: 8 }}>
-//                 <ActivityIndicator color="#22c55e" />
-//                 <Text style={{ color: '#888', fontSize: 12, marginTop: 4 }}>Analyzing with AI...</Text>
-//               </View>
-//             )}
-
-//             {selectedImage && (
-//               <View style={styles.imagePreview}>
-//                 <Image source={{ uri: selectedImage }} style={{ width: '100%', height: 130, borderRadius: 8 }} resizeMode="cover" />
-//                 <TouchableOpacity style={styles.removeImage} onPress={() => setSelectedImage(null)}>
-//                   <Text style={{ color: '#fff', fontSize: 11 }}>✕ Remove</Text>
-//                 </TouchableOpacity>
-//               </View>
-//             )}
-
-//             <Text style={styles.label}>Title *</Text>
-//             <TextInput
-//               style={styles.input}
-//               placeholder="e.g. Garbage pile near river"
-//               placeholderTextColor="#555"
-//               value={title}
-//               onChangeText={setTitle}
-//             />
-
-//             <Text style={styles.label}>Category</Text>
-//             <View style={styles.chips}>
-//               {CATEGORIES.map(c => (
-//                 <TouchableOpacity
-//                   key={c.id}
-//                   style={[styles.chip, category === c.id && { backgroundColor: c.color, borderColor: c.color }]}
-//                   onPress={() => setCategory(c.id)}
-//                 >
-//                   <Text style={[styles.chipText, category === c.id && { color: '#fff' }]}>{c.label}</Text>
-//                 </TouchableOpacity>
-//               ))}
-//             </View>
-
-//             <Text style={styles.label}>Description</Text>
-//             <TextInput
-//               style={[styles.input, { height: 75, textAlignVertical: 'top' }]}
-//               placeholder="Describe the waste situation..."
-//               placeholderTextColor="#555"
-//               value={description}
-//               onChangeText={setDescription}
-//               multiline
-//             />
-
-//             <View style={styles.modalButtons}>
-//               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setReportModal(false); setSelectedImage(null); }}>
-//                 <Text style={styles.cancelText}>Cancel</Text>
-//               </TouchableOpacity>
-//               <TouchableOpacity style={styles.submitBtn} onPress={submitReport} disabled={submitting}>
-//                 <Text style={styles.submitText}>{submitting ? 'Submitting...' : '🚨 Submit Report'}</Text>
-//               </TouchableOpacity>
-//             </View>
-//           </View>
-//         </View>
-//       </Modal>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, backgroundColor: '#0f0f0f' },
-//   header: { backgroundColor: '#1a1a1a', padding: 16, paddingTop: 50, borderBottomWidth: 1, borderBottomColor: '#333' },
-//   headerText: { fontSize: 20, fontWeight: 'bold', color: '#22c55e' },
-//   headerSub: { fontSize: 11, color: '#888', marginTop: 2 },
-//   mapContainer: { flex: 1 },
-//   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-//   placeholderText: { color: '#888', fontSize: 16 },
-//   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
-//   modalSheet: {
-//     backgroundColor: '#1a1a1a', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-//     padding: 22, paddingBottom: 38, borderTopWidth: 1, borderTopColor: '#333'
-//   },
-//   modalHandle: { width: 40, height: 4, backgroundColor: '#444', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
-//   modalTitle: { fontSize: 21, fontWeight: 'bold', color: '#ef4444', marginBottom: 3 },
-//   modalCoords: { fontSize: 12, color: '#888', marginBottom: 12 },
-//   imageUploadBtn: {
-//     borderWidth: 1.5, borderColor: '#22c55e', borderStyle: 'dashed',
-//     borderRadius: 10, padding: 13, alignItems: 'center', marginBottom: 10,
-//     backgroundColor: 'rgba(34,197,94,0.05)'
-//   },
-//   imageUploadText: { color: '#22c55e', fontSize: 13, fontWeight: '600' },
-//   imagePreview: { borderRadius: 8, overflow: 'hidden', marginBottom: 10, position: 'relative' },
-//   removeImage: {
-//     position: 'absolute', top: 6, right: 6,
-//     backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4
-//   },
-//   label: { color: '#888', fontSize: 13, marginBottom: 6, marginTop: 10 },
-//   input: { backgroundColor: '#0f0f0f', color: '#fff', borderRadius: 10, padding: 11, fontSize: 14, borderWidth: 1, borderColor: '#333' },
-//   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-//   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#333', backgroundColor: '#0f0f0f' },
-//   chipText: { color: '#888', fontSize: 12 },
-//   modalButtons: { flexDirection: 'row', gap: 12, marginTop: 18 },
-//   cancelBtn: { flex: 1, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
-//   cancelText: { color: '#888', fontSize: 15 },
-//   submitBtn: { flex: 2, backgroundColor: '#ef4444', padding: 13, borderRadius: 12, alignItems: 'center' },
-//   submitText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-// });
-
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, TextInput, Modal, Alert, Image, ActivityIndicator, ScrollView } from 'react-native';
-import { useAuth } from '../context/AuthContext';
-import { useT } from '../hooks/useT';
+import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 
-const API = 'http://127.0.0.1:8000';
+interface WeatherData {
+  windSpeed: number;
+  windDirection: number;
+  temperature: number;
+  humidity: number;
+  rainfall: number;
+  elevation: number;
+  uvIndex: number;
+  apparentTemp: number;
+  soilMoisture: number;
+  soilTemp: number;
+  evapotranspiration: number;
+  precipitation24h: number;
+}
 
-const CATEGORIES = [
-  { id: 'plastic', label: '🧴 Plastic', color: '#3b82f6' },
-  { id: 'food', label: '🍱 Food waste', color: '#f59e0b' },
-  { id: 'hazardous', label: '☢️ Hazardous', color: '#ef4444' },
-  { id: 'general', label: '🗑️ General', color: '#888' },
-];
+interface TideData {
+  time: string;
+  height: number;
+  type: 'high' | 'low';
+}
 
-const LAYERS = [
-  { id: 'aqi', label: '🌫️ AQI', color: '#f97316' },
-  { id: 'crowd', label: '👥 Crowd', color: '#8b5cf6' },
-  { id: 'waste', label: '🗑️ Waste', color: '#ef4444' },
-  { id: 'eco', label: '♻️ Eco Points', color: '#22c55e' },
-  { id: 'score', label: '📊 Score Zones', color: '#3b82f6' },
-  { id: 'reports', label: '📍 Reports', color: '#f59e0b' },
-];
+interface CropSuitability {
+  crop: string;
+  icon: string;
+  suitability: number;
+  reason: string;
+}
 
-// Helper: always get the freshest token from window
-const getT = () => (window as any)._currentToken || '';
+function AgriculturalMap() {
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [tideData, setTideData] = useState<TideData[]>([]);
+  const [cropSuitability, setCropSuitability] = useState<CropSuitability[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeLayer, setActiveLayer] = useState<string>('terrain');
 
-function WebMap({ onReportRequest }: {
-  onReportRequest: (lat: number, lng: number) => void
-}) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    if ((window as any)._mapInitialized) return;
+    if ((window as any)._agrMapInitialized) return;
 
-    const startMap = async () => {
-      const L = (window as any).L;
-      const map = L.map('map', { zoomControl: true }).setView([20.5937, 78.9629], 5);
-      (window as any)._map = map;
-      (window as any)._L = L;
-      (window as any)._userLat = 0;
-      (window as any)._userLng = 0;
-      (window as any)._routeLayer = null;
-
-      const layerGroups: Record<string, any> = {
-        aqi: L.layerGroup().addTo(map),
-        crowd: L.layerGroup().addTo(map),
-        waste: L.layerGroup().addTo(map),
-        eco: L.layerGroup().addTo(map),
-        score: L.layerGroup().addTo(map),
-        reports: L.layerGroup().addTo(map),
-      };
-      (window as any)._layerGroups = layerGroups;
-
-      (window as any).toggleLayer = (id: string, visible: boolean) => {
-        if (visible) map.addLayer(layerGroups[id]);
-        else map.removeLayer(layerGroups[id]);
-      };
-
-      (window as any).focusLayer = (id: string | null) => {
-        Object.keys(layerGroups).forEach(key => {
-          if (id === null || key === id) map.addLayer(layerGroups[key]);
-          else map.removeLayer(layerGroups[key]);
-        });
-      };
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-      }).addTo(map);
-
-      const makePin = (emoji: string, size = 28) => L.divIcon({
-        html: `<div style="font-size:${size}px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5))">${emoji}</div>`,
-        className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2]
-      });
-
-      const severityColor = (level: 'low' | 'medium' | 'high' | 'critical') => ({
-        low: '#22c55e', medium: '#f59e0b', high: '#f97316', critical: '#ef4444'
-      }[level]);
-
-      const getSeverity = (val: number) =>
-        val < 50 ? 'low' : val < 100 ? 'medium' : val < 150 ? 'high' : 'critical';
-
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        (window as any)._userLat = lat;
-        (window as any)._userLng = lng;
-        map.setView([lat, lng], 14);
-
-        L.marker([lat, lng], { icon: makePin('📍', 36) })
-          .addTo(map)
-          .bindPopup('<b>📍 You are here</b>');
-
-        // AQI layer
-        try {
-          const aqiRes = await fetch(`${API}/map/aqi?lat=${lat}&lng=${lng}`, {
-            headers: { Authorization: `Bearer ${getT()}` }
-          });
-          const aqiData = await aqiRes.json();
-          if (aqiData.results) {
-            aqiData.results.forEach((station: any) => {
-              if (!station.coordinates) return;
-              const val = station.parameters?.[0]?.lastValue || 0;
-              const sev = getSeverity(val);
-              const color = severityColor(sev);
-              const label = { low: 'Good', medium: 'Moderate', high: 'Unhealthy', critical: 'Hazardous' }[sev];
-              const circle = L.circle(
-                [station.coordinates.latitude, station.coordinates.longitude],
-                { color, fillColor: color, fillOpacity: 0.25, radius: 2500, weight: 1.5 }
-              ).bindPopup(
-                `<div style="min-width:180px">
-                  <b>🌫️ AQI Station</b><br/><b>${station.name}</b><br/>
-                  Severity: <b style="color:${color}">${label}</b><br/>
-                  Value: <b>${Math.round(val)} µg/m³</b>
-                </div>`
-              );
-              layerGroups.aqi.addLayer(circle);
-            });
-          }
-        } catch (e) { console.log('AQI error:', e); }
-
-        // Crowd layer
-        const crowdZones = [
-          { lat: lat + 0.008, lng: lng + 0.006, density: 0.9, name: 'Market Area' },
-          { lat: lat - 0.006, lng: lng + 0.012, density: 0.5, name: 'Park Zone' },
-          { lat: lat + 0.014, lng: lng - 0.008, density: 0.2, name: 'Residential' },
-          { lat: lat - 0.012, lng: lng - 0.010, density: 0.8, name: 'Bus Stand' },
-          { lat: lat + 0.002, lng: lng + 0.018, density: 0.6, name: 'Temple Area' },
-        ];
-        crowdZones.forEach(z => {
-          const sev = z.density > 0.7 ? 'critical' : z.density > 0.5 ? 'high' : z.density > 0.3 ? 'medium' : 'low';
-          const color = severityColor(sev);
-          const label = { low: 'Low', medium: 'Moderate', high: 'High', critical: 'Very High' }[sev];
-          layerGroups.crowd.addLayer(
-            L.circle([z.lat, z.lng], {
-              color, fillColor: color, fillOpacity: 0.18,
-              radius: 400 + z.density * 400, weight: 2,
-            }).bindPopup(
-              `<div style="min-width:170px">
-                <b>👥 Crowd Zone</b><br/><b>${z.name}</b><br/>
-                Density: <b style="color:${color}">${label}</b><br/>
-                Waste risk: <b style="color:${color}">${label}</b>
-              </div>`
-            ).bindTooltip(`👥 ${z.name} — ${label}`, { sticky: true })
-          );
-        });
-
-        // Score zones
-        const scoreZones = [
-          { lat: lat + 0.035, lng: lng + 0.035, score: 82, name: 'North Zone', aqi: 35, waste: 'Low', crowd: 'Low' },
-          { lat: lat - 0.035, lng: lng - 0.035, score: 38, name: 'South Zone', aqi: 145, waste: 'High', crowd: 'High' },
-          { lat: lat + 0.035, lng: lng - 0.035, score: 65, name: 'West Zone', aqi: 72, waste: 'Medium', crowd: 'Medium' },
-          { lat: lat - 0.035, lng: lng + 0.035, score: 24, name: 'East Zone', aqi: 180, waste: 'Very High', crowd: 'Very High' },
-          { lat: lat, lng: lng + 0.048, score: 71, name: 'Central Zone', aqi: 55, waste: 'Low', crowd: 'High' },
-        ];
-        scoreZones.forEach(z => {
-          const sev = z.score > 70 ? 'low' : z.score > 40 ? 'medium' : 'critical';
-          const color = severityColor(sev);
-          const status = { low: 'Green', medium: 'Moderate', critical: 'Critical' }[sev];
-          const emoji = { low: '🟢', medium: '🟡', critical: '🔴' }[sev];
-          layerGroups.score.addLayer(
-            L.circle([z.lat, z.lng], {
-              color, fillColor: color, fillOpacity: 0.08,
-              radius: 2000, weight: 2, dashArray: '10,6'
-            }).bindPopup(
-              `<div style="min-width:200px">
-                <b>${emoji} ${z.name}</b><br/>
-                Score: <span style="font-size:18px;color:${color}"><b>${z.score}/100</b></span> — <b>${status}</b><br/>
-                <hr style="margin:5px 0"/>
-                🌫️ AQI: <b>${z.aqi}</b> | 🗑️ Waste: <b>${z.waste}</b><br/>
-                👥 Crowd: <b>${z.crowd}</b>
-              </div>`
-            ).bindTooltip(`${emoji} ${z.name}: ${z.score}/100`, { sticky: true })
-          );
-        });
-
-        // Eco points
-        const ecoPoints = [
-          { lat: lat + 0.018, lng: lng + 0.020, icon: '♻️', name: 'Recycling Center', desc: 'Drop off recyclables', dist: '2.1 km' },
-          { lat: lat - 0.015, lng: lng + 0.025, icon: '🌳', name: 'Community Garden', desc: 'Join local gardening', dist: '2.8 km' },
-          { lat: lat + 0.025, lng: lng - 0.015, icon: '⚡', name: 'EV Charging Station', desc: 'Electric vehicle charging', dist: '3.2 km' },
-          { lat: lat - 0.020, lng: lng - 0.022, icon: '🚰', name: 'Clean Water Station', desc: 'Safe drinking water', dist: '1.8 km' },
-          { lat: lat + 0.010, lng: lng - 0.030, icon: '🚻', name: 'Public Toilet', desc: 'Sanitation facility', dist: '1.2 km' },
-          { lat: lat - 0.005, lng: lng + 0.035, icon: '🌿', name: 'Eco Vendor', desc: 'Zero waste food stall', dist: '3.5 km' },
-        ];
-        ecoPoints.forEach(p => {
-          layerGroups.eco.addLayer(
-            L.marker([p.lat, p.lng], { icon: makePin(p.icon) })
-              .bindPopup(
-                `<div style="min-width:200px">
-                  <b>${p.icon} ${p.name}</b><br/>
-                  ${p.desc}<br/>Distance: <b>${p.dist}</b><br/>
-                  <button onclick="window.getRoute(${p.lat}, ${p.lng}, '${p.name}')"
-                    style="margin-top:8px;padding:6px 0;background:#22c55e;color:white;border:none;
-                    border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;width:100%">
-                    🗺️ Get Walking Route
-                  </button>
-                </div>`
-              ).bindTooltip(p.name, { sticky: true })
-          );
-        });
-
-        // Reports layer
-        try {
-          const repRes = await fetch(`${API}/reports/`, {
-            headers: { Authorization: `Bearer ${getT()}` }
-          });
-          const reports = await repRes.json();
-          if (Array.isArray(reports)) {
-            reports.forEach((r: any) => {
-              if (!r.location?.lat || !r.location?.lng) return;
-              const catIcon = r.category === 'plastic' ? '🧴' : r.category === 'hazardous' ? '☢️' : r.category === 'food' ? '🍱' : '🗑️';
-              const statusColor = r.status === 'resolved' ? '#22c55e' : r.status === 'approved' ? '#3b82f6' : '#f59e0b';
-              const squareIcon = L.divIcon({
-                html: `<div style="width:28px;height:28px;background:${statusColor};border-radius:6px;
-                  display:flex;align-items:center;justify-content:center;
-                  font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${catIcon}</div>`,
-                className: '', iconSize: [28, 28], iconAnchor: [14, 14]
-              });
-              layerGroups.reports.addLayer(
-                L.marker([r.location.lat, r.location.lng], { icon: squareIcon })
-                  .bindPopup(
-                    `<div style="min-width:180px">
-                      <b>${catIcon} ${r.title}</b><br/>
-                      Category: ${r.category || 'general'}<br/>
-                      Status: <b style="color:${statusColor}">${r.status}</b><br/>
-                      ${r.description || ''}
-                    </div>`
-                  ).bindTooltip(`${catIcon} ${r.title}`, { sticky: true })
-              );
-            });
-          }
-        } catch (e) { console.log('Reports error:', e); }
-
-        // Smart route — always uses fresh token via getT()
-        (window as any).getRoute = async (destLat: number, destLng: number, name: string) => {
-          const userLat = (window as any)._userLat;
-          const userLng = (window as any)._userLng;
-
-          if ((window as any)._routeLayer) {
-            map.removeLayer((window as any)._routeLayer);
-            (window as any)._routeLayer = null;
-          }
-
-          L.popup().setLatLng([destLat, destLng])
-            .setContent('<b>🔄 Calculating route...</b>')
-            .openOn(map);
-
-          try {
-            const freshToken = getT(); // always fresh from window
-            console.log('Using token for route:', freshToken ? freshToken.slice(0, 20) + '...' : 'EMPTY');
-
-            const routeRes = await fetch(
-              `${API}/map/route?startLng=${userLng}&startLat=${userLat}&endLng=${destLng}&endLat=${destLat}`,
-              { headers: { Authorization: `Bearer ${freshToken}` } }
-            );
-
-            console.log('Route status:', routeRes.status);
-            const routeData = await routeRes.json();
-            const coords = routeData.features?.[0]?.geometry?.coordinates;
-
-            if (coords?.length > 0) {
-              const latlngs = coords.map((c: any) => [c[1], c[0]]);
-              const routeLayer = L.polyline(latlngs, {
-                color: '#3b82f6', weight: 7, opacity: 0.9,
-              }).addTo(map);
-              const animLayer = L.polyline(latlngs, {
-                color: '#fff', weight: 3, opacity: 0.6, dashArray: '12,18'
-              }).addTo(map);
-
-              (window as any)._routeLayer = L.layerGroup([routeLayer, animLayer]);
-
-              const seg = routeData.features[0].properties.segments[0];
-              const km = (seg.distance / 1000).toFixed(1);
-              const mins = Math.round(seg.duration / 60);
-
-              routeLayer.bindPopup(
-                `<div style="min-width:190px">
-                  <b>🔵 Route to ${name}</b><br/>
-                  📏 <b>${km} km</b> | ⏱️ <b>${mins} min walk</b><br/>
-                  <small style="color:#3b82f6">Least polluted path</small><br/>
-                  <button onclick="window._clearRoute()"
-                    style="margin-top:6px;padding:5px 12px;background:#ef4444;color:white;
-                    border:none;border-radius:6px;cursor:pointer;font-size:12px">
-                    ✕ Clear Route
-                  </button>
-                </div>`
-              ).openPopup();
-              map.fitBounds(routeLayer.getBounds(), { padding: [60, 60] });
-            } else {
-              map.closePopup();
-              alert('Could not calculate route to ' + name + '. Status: ' + routeRes.status);
-            }
-          } catch (e) {
-            console.log('Route error:', e);
-            map.closePopup();
-            alert('Route request failed. Check console.');
-          }
-        };
-
-        (window as any)._clearRoute = () => {
-          if ((window as any)._routeLayer) {
-            map.removeLayer((window as any)._routeLayer);
-            (window as any)._routeLayer = null;
-          }
-        };
-
-        // Click to report
-        map.on('click', (e: any) => {
-          L.popup()
-            .setLatLng(e.latlng)
-            .setContent(
-              `<div style="min-width:190px">
-                <b>🗑️ Report waste here?</b><br/>
-                <small style="color:#888">${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</small><br/>
-                <button onclick="window._onReportRequest(${e.latlng.lat}, ${e.latlng.lng})"
-                  style="margin-top:8px;padding:7px 0;background:#ef4444;color:white;border:none;
-                  border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;width:100%">
-                  🚨 Report Waste Here
-                </button>
-              </div>`
-            ).openOn(map);
-        });
-
-        (window as any)._onReportRequest = (lat: number, lng: number) => {
-          onReportRequest(lat, lng);
-          map.closePopup();
-        };
-
-      }, () => console.log('Geolocation denied'));
+    const initMap = async () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => loadMapAndData(pos.coords.latitude, pos.coords.longitude),
+        () => loadMapAndData(20.0059, 73.7897) // Nashik default
+      );
     };
 
-    const tryInit = setInterval(() => {
-      if (!document.getElementById('map')) return;
-      clearInterval(tryInit);
-      (window as any)._mapInitialized = true;
-
+    const loadMapAndData = async (lat: number, lng: number) => {
+      // Load Leaflet CSS + JS
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
 
-      if (document.getElementById('leaflet-script')) { startMap(); return; }
+      await new Promise<void>((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+      });
 
-      const script = document.createElement('script');
-      script.id = 'leaflet-script';
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = startMap;
-      document.head.appendChild(script);
-    }, 50);
+      initializeMap(lat, lng);
+      await fetchAllData(lat, lng);
+    };
 
-    return () => clearInterval(tryInit);
-  }, []);
+    const initializeMap = (lat: number, lng: number) => {
+      const L = (window as any).L;
+      const map = L.map('agr-map', { zoomControl: true }).setView([lat, lng], 8);
 
-  return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <div id="map" style={{ width: '100%', height: '100%' }} />
-    </div>
-  );
-}
+      // Base terrain layer
+      const terrain = L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; Stadia Maps',
+        opacity: 0.85,
+      });
+      terrain.addTo(map);
 
-export default function MapScreen() {
-  const { loading, getValidToken } = useAuth();
-  const t = useT();
-  const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({
-    aqi: true, crowd: true, waste: true, eco: true, score: true, reports: true
-  });
-  const [focusMode, setFocusMode] = useState<string | null>(null);
-  const [showLegend, setShowLegend] = useState(false);
-  const [reportModal, setReportModal] = useState(false);
-  const [reportLat, setReportLat] = useState(0);
-  const [reportLng, setReportLng] = useState(0);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('general');
-  const [submitting, setSubmitting] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+      // --- EQUATOR LINE ---
+      L.polyline([[0, -180], [0, 180]], {
+        color: '#ff4444',
+        weight: 2,
+        dashArray: '8,6',
+        opacity: 0.9,
+      }).bindTooltip('Equator (0°)', { permanent: false }).addTo(map);
 
-  useEffect(() => {
-    const refreshToken = async () => {
-      const t = await getValidToken();
-      if (t && Platform.OS === 'web') {
-        (window as any)._currentToken = t;
-        console.log('Token refreshed on window:', t.slice(0, 20) + '...');
+      // Tropic of Cancer
+      L.polyline([[23.5, -180], [23.5, 180]], {
+        color: '#ff8800',
+        weight: 1.5,
+        dashArray: '6,4',
+        opacity: 0.7,
+      }).bindTooltip('Tropic of Cancer (23.5°N)', { permanent: false }).addTo(map);
+
+      // Tropic of Capricorn
+      L.polyline([[-23.5, -180], [-23.5, 180]], {
+        color: '#ff8800',
+        weight: 1.5,
+        dashArray: '6,4',
+        opacity: 0.7,
+      }).bindTooltip('Tropic of Capricorn (23.5°S)', { permanent: false }).addTo(map);
+
+      // --- RAIN LAYER (OpenWeatherMap WMS — no key needed for tile overlay) ---
+      // Using Open-Meteo based rain visualization instead
+      const rainLayer = L.tileLayer(
+        'https://tilecache.rainviewer.com/v2/radar/nowcast/256/{z}/{x}/{y}/8/1_1.png',
+        { opacity: 0.5, attribution: 'RainViewer' }
+      );
+
+      // --- WIND LAYER (Windy tiles) ---
+      // Use OpenWeatherMap wind tiles (free, no key for basic)
+      // Alternatively use a colored wind speed overlay via canvas
+
+      // --- CLOUD LAYER ---
+      const cloudLayer = L.tileLayer(
+        'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=no_key_needed_for_demo',
+        { opacity: 0.4, attribution: 'OpenWeatherMap' }
+      );
+
+      // Store layers for toggle
+      const layerMap: Record<string, any> = {
+        terrain,
+        rain: rainLayer,
+      };
+      (window as any)._layers = layerMap;
+      (window as any)._agrMap = map;
+      (window as any)._L = L;
+      (window as any)._agrMapInitialized = true;
+
+      // Add compass rose (SVG-based, no emoji)
+      const compassControl = L.Control.extend({
+        onAdd: () => {
+          const div = L.DomUtil.create('div');
+          div.style.cssText = 'background:rgba(10,20,10,0.92);border:1px solid #2d5a27;border-radius:50%;width:70px;height:70px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.5);';
+          div.innerHTML = `
+            <svg width="60" height="60" viewBox="0 0 60 60">
+              <circle cx="30" cy="30" r="28" fill="rgba(0,0,0,0.3)" stroke="#2d5a27" stroke-width="1"/>
+              <!-- N arrow (red) -->
+              <polygon points="30,6 26,30 30,26 34,30" fill="#e74c3c"/>
+              <!-- S arrow (white) -->
+              <polygon points="30,54 26,30 30,34 34,30" fill="#ecf0f1"/>
+              <!-- E -->
+              <polygon points="54,30 30,26 34,30 30,34" fill="#bdc3c7"/>
+              <!-- W -->
+              <polygon points="6,30 30,26 26,30 30,34" fill="#bdc3c7"/>
+              <circle cx="30" cy="30" r="3" fill="#e74c3c"/>
+              <text x="30" y="16" text-anchor="middle" fill="#e74c3c" font-size="8" font-weight="bold" font-family="monospace">N</text>
+              <text x="30" y="48" text-anchor="middle" fill="#ecf0f1" font-size="8" font-weight="bold" font-family="monospace">S</text>
+              <text x="46" y="33" text-anchor="middle" fill="#bdc3c7" font-size="8" font-weight="bold" font-family="monospace">E</text>
+              <text x="14" y="33" text-anchor="middle" fill="#bdc3c7" font-size="8" font-weight="bold" font-family="monospace">W</text>
+            </svg>`;
+          return div;
+        },
+        getPosition: () => 'topleft',
+      });
+      map.addControl(new compassControl());
+    };
+
+    const fetchAllData = async (lat: number, lng: number) => {
+      try {
+        setLoading(true);
+
+        // Fetch weather + agricultural data from Open-Meteo
+        const weatherRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+          `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,` +
+          `weather_code,wind_speed_10m,wind_direction_10m,uv_index` +
+          `&hourly=soil_moisture_0_to_1cm,soil_temperature_0cm,evapotranspiration` +
+          `&daily=precipitation_sum,uv_index_max` +
+          `&timezone=auto&forecast_days=1`
+        );
+        const weatherJson = await weatherRes.json();
+        const current = weatherJson.current;
+        const hourly = weatherJson.hourly;
+
+        // Get elevation from Open-Meteo
+        const elevRes = await fetch(
+          `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`
+        );
+        const elevJson = await elevRes.json();
+        const elevation = elevJson.elevation?.[0] || 0;
+
+        const data: WeatherData = {
+          temperature: current.temperature_2m,
+          humidity: current.relative_humidity_2m,
+          rainfall: current.precipitation || 0,
+          windSpeed: current.wind_speed_10m,
+          windDirection: current.wind_direction_10m,
+          elevation,
+          uvIndex: current.uv_index ?? 0,
+          apparentTemp: current.apparent_temperature,
+          soilMoisture: hourly?.soil_moisture_0_to_1cm?.[0] ?? 0,
+          soilTemp: hourly?.soil_temperature_0cm?.[0] ?? current.temperature_2m,
+          evapotranspiration: hourly?.evapotranspiration?.[0] ?? 0,
+          precipitation24h: weatherJson.daily?.precipitation_sum?.[0] ?? 0,
+        };
+
+        setWeatherData(data);
+
+        // Fetch tide data (using WorldTides API-compatible endpoint via Open-Meteo marine)
+        // Open-Meteo marine for nearest coastal point
+        try {
+          const marineRes = await fetch(
+            `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lng}` +
+            `&hourly=wave_height,wave_direction,wave_period&timezone=auto&forecast_days=1`
+          );
+          const marineJson = await marineRes.json();
+
+          if (marineJson.hourly?.wave_height) {
+            const heights: number[] = marineJson.hourly.wave_height;
+            const times: string[] = marineJson.hourly.time;
+            const tides: TideData[] = [];
+
+            for (let i = 1; i < heights.length - 1; i++) {
+              if (heights[i] > heights[i - 1] && heights[i] > heights[i + 1]) {
+                tides.push({ time: times[i], height: parseFloat(heights[i].toFixed(2)), type: 'high' });
+              } else if (heights[i] < heights[i - 1] && heights[i] < heights[i + 1]) {
+                tides.push({ time: times[i], height: parseFloat(heights[i].toFixed(2)), type: 'low' });
+              }
+            }
+            setTideData(tides.slice(0, 4));
+          }
+        } catch (e) {
+          console.log('Marine data not available for this location');
+        }
+
+        const crops = analyzeCropSuitability(data);
+        setCropSuitability(crops);
+
+        displayAllLayers(lat, lng, data);
+        setLoading(false);
+      } catch (err) {
+        console.error('Data fetch error:', err);
+        setLoading(false);
       }
     };
 
-    refreshToken();
-    // Refresh every 50 minutes so token never expires during use
-    const interval = setInterval(refreshToken, 50 * 60 * 1000);
-    return () => clearInterval(interval);
+    const analyzeCropSuitability = (w: WeatherData): CropSuitability[] => {
+      const crops: CropSuitability[] = [];
+      const t = w.temperature;
+      const h = w.humidity;
+      const sm = w.soilMoisture * 100; // convert to %
+
+      // Scoring function
+      const score = (base: number, bonuses: boolean[]) =>
+        Math.min(99, base + bonuses.filter(Boolean).length * 4);
+
+      if (t >= 20 && t <= 35 && h > 50)
+        crops.push({ crop: 'Maize', icon: 'M', suitability: score(82, [sm > 30, w.rainfall > 0, t < 30]), reason: `Temp ${t}°C, Humidity ${h}%` });
+      if (t >= 15 && t <= 30)
+        crops.push({ crop: 'Wheat', icon: 'W', suitability: score(78, [h > 40, sm > 25, t < 25]), reason: `Ideal temp range` });
+      if (t >= 25 && h > 60)
+        crops.push({ crop: 'Rice', icon: 'R', suitability: score(80, [sm > 50, w.rainfall > 5, h > 70]), reason: `Warm & moist` });
+      if (t >= 10 && t <= 25 && h > 40)
+        crops.push({ crop: 'Tomato', icon: 'T', suitability: score(75, [sm > 20, w.soilTemp > 15, t > 15]), reason: `Moderate climate` });
+      if (t >= 15 && t <= 28)
+        crops.push({ crop: 'Chilli', icon: 'C', suitability: score(72, [h > 50, sm > 25]), reason: `Warm climate suitable` });
+      if (t >= 18 && t <= 32 && w.elevation < 600)
+        crops.push({ crop: 'Sugarcane', icon: 'S', suitability: score(70, [h > 60, sm > 35, w.precipitation24h > 2]), reason: `Low altitude, warm` });
+      if (h > 70 && t > 22)
+        crops.push({ crop: 'Banana', icon: 'B', suitability: score(74, [sm > 40, w.rainfall > 0]), reason: `High humidity` });
+      if (t >= 10 && t <= 22 && sm > 20)
+        crops.push({ crop: 'Potato', icon: 'P', suitability: score(68, [h > 50, w.soilTemp < 20]), reason: `Cool & moist soil` });
+      if (t >= 22 && t <= 38 && w.elevation < 300)
+        crops.push({ crop: 'Cotton', icon: 'Co', suitability: score(65, [h < 70, sm > 20, w.uvIndex > 4]), reason: `Hot & dry preferred` });
+      if (t >= 18 && t <= 30 && sm > 15)
+        crops.push({ crop: 'Soybean', icon: 'Sb', suitability: score(70, [h > 55, w.precipitation24h > 1]), reason: `Moderate conditions` });
+
+      return crops.sort((a, b) => b.suitability - a.suitability).slice(0, 6);
+    };
+
+    const displayAllLayers = (lat: number, lng: number, w: WeatherData) => {
+      const L = (window as any)._L;
+      const map = (window as any)._agrMap;
+      if (!L || !map) return;
+
+      // ---- WIND DIRECTION ARROW (dynamic, SVG-based) ----
+      const windDeg = w.windDirection;
+      const windColor = w.windSpeed > 30 ? '#e74c3c' : w.windSpeed > 15 ? '#f39c12' : '#2ecc71';
+      const windIcon = L.divIcon({
+        html: `<div style="transform:rotate(${windDeg}deg);width:50px;height:50px;display:flex;align-items:center;justify-content:center;">
+          <svg width="48" height="48" viewBox="0 0 48 48">
+            <defs><marker id="ah" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+              <polygon points="0 0, 6 3, 0 6" fill="${windColor}"/>
+            </marker></defs>
+            <circle cx="24" cy="24" r="22" fill="rgba(0,0,0,0.6)" stroke="${windColor}" stroke-width="1.5"/>
+            <line x1="24" y1="36" x2="24" y2="10" stroke="${windColor}" stroke-width="2.5" marker-end="url(#ah)"/>
+            <circle cx="24" cy="24" r="3" fill="${windColor}"/>
+          </svg>
+        </div>`,
+        className: '',
+        iconSize: [50, 50],
+        iconAnchor: [25, 25],
+      });
+      L.marker([lat, lng], { icon: windIcon })
+        .addTo(map)
+        .bindPopup(`<b>Wind</b><br>Speed: ${w.windSpeed} km/h<br>Direction: ${windDeg}° (${degToCompass(windDeg)})<br>Color: ${w.windSpeed > 30 ? 'High' : w.windSpeed > 15 ? 'Moderate' : 'Low'}`);
+
+      // ---- HUMIDITY ZONE (gradient circle) ----
+      const humColor = w.humidity > 75 ? '#1a6bb5' : w.humidity > 55 ? '#3498db' : '#7fb3d3';
+      L.circle([lat, lng], {
+        color: humColor,
+        fillColor: humColor,
+        fillOpacity: Math.min(0.45, w.humidity / 150),
+        radius: 18000,
+        weight: 1.5,
+      }).addTo(map).bindPopup(`<b>Humidity Zone</b><br>${w.humidity}% relative humidity`);
+
+      // ---- ALTITUDE MARKER ----
+      const altColor = w.elevation > 1000 ? '#8e44ad' : w.elevation > 500 ? '#7f8c8d' : '#27ae60';
+      const altLabel = w.elevation > 1000 ? 'High Altitude' : w.elevation > 500 ? 'Mid Altitude' : 'Low Altitude';
+      L.marker([lat + 0.08, lng], {
+        icon: L.divIcon({
+          html: `<div style="background:${altColor};color:#fff;padding:4px 9px;border-radius:4px;font-size:11px;font-weight:bold;font-family:monospace;border:1px solid rgba(255,255,255,0.3);white-space:nowrap;">
+            ALT: ${Math.round(w.elevation)}m (${altLabel})
+          </div>`,
+          className: '',
+        }),
+      }).addTo(map).bindPopup(`<b>Elevation</b><br>${Math.round(w.elevation)}m above sea level<br>${altLabel}`);
+
+      // ---- UV INDEX MARKER ----
+      const uvColor = w.uvIndex > 8 ? '#c0392b' : w.uvIndex > 5 ? '#e67e22' : '#27ae60';
+      const uvLabel = w.uvIndex > 8 ? 'Very High' : w.uvIndex > 5 ? 'High' : w.uvIndex > 2 ? 'Moderate' : 'Low';
+      L.marker([lat - 0.08, lng], {
+        icon: L.divIcon({
+          html: `<div style="background:${uvColor};color:#fff;padding:4px 9px;border-radius:4px;font-size:11px;font-weight:bold;font-family:monospace;border:1px solid rgba(255,255,255,0.3);white-space:nowrap;">
+            UV: ${w.uvIndex.toFixed(1)} (${uvLabel})
+          </div>`,
+          className: '',
+        }),
+      }).addTo(map).bindPopup(`<b>UV Index</b>: ${w.uvIndex.toFixed(1)}<br>${uvLabel}<br>Protect crops above UV 6`);
+
+      // ---- TEMPERATURE MARKER ----
+      const tempColor = w.temperature > 35 ? '#e74c3c' : w.temperature > 25 ? '#f39c12' : '#3498db';
+      L.marker([lat, lng + 0.12], {
+        icon: L.divIcon({
+          html: `<div style="background:${tempColor};color:#fff;padding:4px 9px;border-radius:4px;font-size:11px;font-weight:bold;font-family:monospace;border:1px solid rgba(255,255,255,0.3);white-space:nowrap;">
+            TEMP: ${w.temperature}°C / Feels ${w.apparentTemp}°C
+          </div>`,
+          className: '',
+        }),
+      }).addTo(map).bindPopup(`<b>Temperature</b><br>Air: ${w.temperature}°C<br>Feels like: ${w.apparentTemp}°C<br>Soil: ${w.soilTemp?.toFixed(1)}°C`);
+
+      // ---- RAIN MARKER ----
+      const rainColor = w.rainfall > 10 ? '#1a6bb5' : w.rainfall > 0 ? '#3498db' : '#95a5a6';
+      L.marker([lat, lng - 0.12], {
+        icon: L.divIcon({
+          html: `<div style="background:${rainColor};color:#fff;padding:4px 9px;border-radius:4px;font-size:11px;font-weight:bold;font-family:monospace;border:1px solid rgba(255,255,255,0.3);white-space:nowrap;">
+            RAIN: ${w.rainfall}mm now / ${w.precipitation24h}mm 24h
+          </div>`,
+          className: '',
+        }),
+      }).addTo(map).bindPopup(`<b>Rainfall</b><br>Current: ${w.rainfall}mm<br>Last 24h: ${w.precipitation24h}mm`);
+
+      // ---- RAINFALL CIRCLE (if raining) ----
+      if (w.rainfall > 0) {
+        L.circle([lat, lng], {
+          color: '#0ea5e9',
+          fillColor: '#0ea5e9',
+          fillOpacity: 0.12,
+          radius: Math.max(w.rainfall * 500, 3000),
+          weight: 1.5,
+          dashArray: '5,5',
+        }).addTo(map).bindPopup(`<b>Rain Zone</b><br>${w.rainfall}mm current precipitation`);
+      }
+
+      // ---- SOIL MOISTURE RING ----
+      const smPct = (w.soilMoisture * 100).toFixed(1);
+      const smColor = w.soilMoisture > 0.4 ? '#2980b9' : w.soilMoisture > 0.2 ? '#27ae60' : '#e67e22';
+      L.circle([lat, lng], {
+        color: smColor,
+        fillColor: smColor,
+        fillOpacity: 0.08,
+        radius: 10000,
+        weight: 2,
+        dashArray: '3,8',
+      }).addTo(map).bindPopup(`<b>Soil Moisture</b><br>${smPct}% volumetric<br>Soil Temp: ${w.soilTemp?.toFixed(1)}°C<br>Evapotranspiration: ${w.evapotranspiration?.toFixed(2)} mm/h`);
+
+      // ---- USER LOCATION MARKER (SVG pin) ----
+      const pinIcon = L.divIcon({
+        html: `<div style="display:flex;flex-direction:column;align-items:center;">
+          <svg width="32" height="40" viewBox="0 0 32 40">
+            <path d="M16 0 C7.16 0 0 7.16 0 16 C0 28 16 40 16 40 C16 40 32 28 32 16 C32 7.16 24.84 0 16 0Z" fill="#27ae60"/>
+            <circle cx="16" cy="16" r="8" fill="white"/>
+            <circle cx="16" cy="16" r="4" fill="#27ae60"/>
+          </svg>
+        </div>`,
+        className: '',
+        iconSize: [32, 40],
+        iconAnchor: [16, 40],
+      });
+      L.marker([lat, lng], { icon: pinIcon })
+        .addTo(map)
+        .bindPopup(`<b>Your Location</b><br>Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`);
+
+      // ---- CARDINAL DIRECTION LABELS around location ----
+      const cardinalOffset = 0.25;
+      const cardinals: [number, number, string][] = [
+        [lat + cardinalOffset, lng, 'N'],
+        [lat - cardinalOffset, lng, 'S'],
+        [lat, lng + cardinalOffset * 1.4, 'E'],
+        [lat, lng - cardinalOffset * 1.4, 'W'],
+      ];
+      cardinals.forEach(([clat, clng, label]) => {
+        L.marker([clat, clng], {
+          icon: L.divIcon({
+            html: `<div style="background:rgba(0,0,0,0.75);color:#ecf0f1;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;font-family:monospace;border:1.5px solid #aaa;">${label}</div>`,
+            className: '',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+        }).addTo(map);
+      });
+
+      // ---- SEA LEVEL REFERENCE LINE (horizontal across map) ----
+      L.polyline([[lat, lng - 5], [lat, lng + 5]], {
+        color: '#3498db',
+        weight: 1.5,
+        dashArray: '4,6',
+        opacity: 0.5,
+      }).bindTooltip(`Sea Level Ref: ${Math.round(w.elevation)}m above`, { permanent: false }).addTo(map);
+
+      // ---- LAYER CONTROL ----
+      const L2 = L;
+      const rainviewerLayer = L2.tileLayer(
+        'https://tilecache.rainviewer.com/v2/radar/nowcast/256/{z}/{x}/{y}/8/1_1.png',
+        { opacity: 0.5, attribution: 'RainViewer' }
+      );
+      const overlays = {
+        'Live Rain Radar': rainviewerLayer,
+      };
+      L2.control.layers({}, overlays, { position: 'topright' }).addTo(map);
+    };
+
+    const degToCompass = (deg: number): string => {
+      const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      return dirs[Math.round(deg / 22.5) % 16];
+    };
+
+    if (Platform.OS === 'web') initMap();
+    return () => { (window as any)._agrMapInitialized = false; };
   }, []);
 
-  const toggleLayer = (id: string) => {
-    const next = !activeLayers[id];
-    setActiveLayers(prev => ({ ...prev, [id]: next }));
-    if ((window as any).toggleLayer) (window as any).toggleLayer(id, next);
-  };
-
-  const handleFocus = (id: string) => {
-    const next = focusMode === id ? null : id;
-    setFocusMode(next);
-    if ((window as any).focusLayer) (window as any).focusLayer(next);
-    if (next === null) {
-      Object.entries(activeLayers).forEach(([key, val]) => {
-        if ((window as any).toggleLayer) (window as any).toggleLayer(key, val);
-      });
-    }
-  };
-
-  const handleReportRequest = (lat: number, lng: number) => {
-    setReportLat(lat); setReportLng(lng);
-    setTitle(''); setDescription(''); setCategory('general');
-    setSelectedImage(null); setReportModal(true);
-  };
-
-  const pickAndAnalyzeImage = () => {
-    if (Platform.OS !== 'web') return;
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => setSelectedImage(ev.target?.result as string);
-      reader.readAsDataURL(file);
-      setAnalyzing(true);
-      try {
-        const freshToken = await getValidToken();
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch(`${API}/vision/analyze`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${freshToken}` },
-          body: formData
-        });
-        const result = await res.json();
-        if (result.detected) {
-          setTitle(result.title || '');
-          setDescription(result.description || '');
-          setCategory(result.category || 'general');
-          Alert.alert('🤖 AI Detected!', `Type: ${result.category}\nSeverity: ${result.severity}\n\nFields auto-filled!`);
-        } else Alert.alert('No waste detected', 'Please fill in manually.');
-      } catch { Alert.alert('Analysis failed', 'Fill in manually.'); }
-      finally { setAnalyzing(false); }
-    };
-    input.click();
-  };
-
-  const submitReport = async () => {
-    if (!title.trim()) { Alert.alert('Please enter a title'); return; }
-    setSubmitting(true);
-    try {
-      const freshToken = await getValidToken();
-      const res = await fetch(`${API}/reports/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshToken}` },
-        body: JSON.stringify({
-          title, description, category,
-          location: { lat: reportLat, lng: reportLng },
-          data: { reported_via: 'map_click' }
-        })
-      });
-      if (res.ok) {
-        Alert.alert('✅ Reported!', 'Waste report submitted!');
-        setReportModal(false); setSelectedImage(null);
-      } else Alert.alert('Error', 'Could not submit report');
-    } catch { Alert.alert('Error', 'Network error'); }
-    finally { setSubmitting(false); }
-  };
-
-  if (loading) return (
-    <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator color="#22c55e" size="large" />
-    </View>
-  );
+  const getSuitabilityColor = (pct: number) =>
+    pct >= 85 ? '#27ae60' : pct >= 70 ? '#f39c12' : '#e74c3c';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerText}>🗺️ {t('Smart Eco Map')}</Text>
-        <Text style={styles.headerSub}>{t('Tap layers to show/hide • Click map to report')}</Text>
-      </View>
+      {Platform.OS === 'web' ? (
+        <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <div id="agr-map" style={{ width: '100%', flex: 1 }} />
 
-      <View style={styles.layerBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 12 }}>
-          {LAYERS.map(layer => (
-            <TouchableOpacity
-              key={layer.id}
-              style={[
-                styles.layerChip,
-                activeLayers[layer.id] && { backgroundColor: layer.color + '22', borderColor: layer.color },
-                focusMode === layer.id && { backgroundColor: layer.color, borderColor: layer.color }
-              ]}
-              onPress={() => toggleLayer(layer.id)}
-              onLongPress={() => handleFocus(layer.id)}
-            >
-              <Text style={[
-                styles.layerChipText,
-                activeLayers[layer.id] && { color: layer.color },
-                focusMode === layer.id && { color: '#fff' }
-              ]}>
-                {layer.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+          {/* Top legend bar */}
+          <div style={{
+            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(8,20,8,0.92)', color: '#fff', padding: '6px 16px',
+            borderRadius: '20px', fontSize: '11px', fontFamily: 'monospace',
+            border: '1px solid #2d5a27', zIndex: 1000, display: 'flex', gap: '14px',
+            whiteSpace: 'nowrap',
+          }}>
+            <span style={{ color: '#ff4444' }}>— Equator</span>
+            <span style={{ color: '#ff8800' }}>— Tropics</span>
+            <span style={{ color: '#3498db' }}>◯ Humidity Zone</span>
+            <span style={{ color: '#27ae60' }}>◯ Soil Moisture</span>
+            <span style={{ color: '#e74c3c' }}>⊕ Rainfall</span>
+          </div>
 
-      {focusMode && (
-        <View style={styles.focusBanner}>
-          <Text style={styles.focusText}>
-            Focus: {LAYERS.find(l => l.id === focusMode)?.label} — Long press to exit
-          </Text>
-          <TouchableOpacity onPress={() => handleFocus(focusMode)}>
-            <Text style={styles.focusExit}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+          {/* Side panel */}
+          {loading ? (
+            <div style={{ position: 'absolute', bottom: 20, right: 10, background: 'rgba(8,20,8,0.95)', color: '#7fba00', padding: '20px', borderRadius: '10px', fontSize: '13px', zIndex: 1000, fontFamily: 'monospace', border: '1px solid #2d5a27' }}>
+              Loading live agricultural data...
+            </div>
+          ) : weatherData ? (
+            <div style={{
+              position: 'absolute', bottom: 10, right: 10,
+              background: 'rgba(6,14,6,0.96)', color: '#e8f5e9',
+              padding: '14px', borderRadius: '10px', maxWidth: '270px',
+              fontSize: '11px', border: '1px solid #2d5a27', zIndex: 1000,
+              maxHeight: '80vh', overflowY: 'auto', fontFamily: 'monospace',
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '10px', color: '#7fba00', fontSize: '13px', letterSpacing: '1px' }}>
+                AGRI-MAP LIVE DATA
+              </div>
 
-      <View style={styles.mapContainer}>
-        {Platform.OS === 'web'
-          ? <WebMap onReportRequest={handleReportRequest} />
-          : <View style={styles.placeholder}><Text style={styles.placeholderText}>Map on web only</Text></View>
-        }
-      </View>
+              {/* Weather grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #1a3a1a' }}>
+                {[
+                  ['TEMP', `${weatherData.temperature}°C`],
+                  ['FEELS', `${weatherData.apparentTemp}°C`],
+                  ['HUMIDITY', `${weatherData.humidity}%`],
+                  ['WIND', `${weatherData.windSpeed} km/h`],
+                  ['WIND DIR', `${weatherData.windDirection}° ${windDegToLabel(weatherData.windDirection)}`],
+                  ['RAIN NOW', `${weatherData.rainfall}mm`],
+                  ['RAIN 24H', `${weatherData.precipitation24h}mm`],
+                  ['ALTITUDE', `${Math.round(weatherData.elevation)}m`],
+                  ['UV INDEX', weatherData.uvIndex.toFixed(1)],
+                  ['SOIL TEMP', `${weatherData.soilTemp?.toFixed(1)}°C`],
+                  ['SOIL MOIST', `${(weatherData.soilMoisture * 100).toFixed(1)}%`],
+                  ['EVAPOTRANS', `${weatherData.evapotranspiration?.toFixed(2)}mm/h`],
+                ].map(([label, val]) => (
+                  <div key={label} style={{ background: 'rgba(255,255,255,0.04)', padding: '4px 6px', borderRadius: '4px' }}>
+                    <div style={{ color: '#4caf50', fontSize: '9px' }}>{label}</div>
+                    <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{val}</div>
+                  </div>
+                ))}
+              </div>
 
-      <TouchableOpacity style={styles.legendBtn} onPress={() => setShowLegend(!showLegend)}>
-        <Text style={styles.legendBtnText}>📋</Text>
-      </TouchableOpacity>
+              {/* Tides */}
+              {tideData.length > 0 && (
+                <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid #1a3a1a' }}>
+                  <div style={{ color: '#7fba00', fontWeight: 'bold', marginBottom: '6px', fontSize: '11px' }}>TIDE FORECAST</div>
+                  {tideData.map((t, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                      <span style={{ color: t.type === 'high' ? '#3498db' : '#95a5a6' }}>
+                        {t.type === 'high' ? 'HIGH' : 'LOW'} TIDE
+                      </span>
+                      <span>{t.time.split('T')[1]?.slice(0, 5)}</span>
+                      <span style={{ color: '#e8f5e9' }}>{t.height}m</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-      {showLegend && (
-        <View style={styles.legend}>
-          <Text style={styles.legendTitle}>Map Legend</Text>
-          <Text style={styles.legendSection}>Severity (all layers)</Text>
-          <Text style={styles.legendItem}>🟢 Low / Good / Green zone</Text>
-          <Text style={styles.legendItem}>🟡 Moderate</Text>
-          <Text style={styles.legendItem}>🟠 High / Unhealthy</Text>
-          <Text style={styles.legendItem}>🔴 Critical / Hazardous</Text>
-          <Text style={styles.legendSection}>Shapes = Type</Text>
-          <Text style={styles.legendItem}>⬤ Filled = Crowd density</Text>
-          <Text style={styles.legendItem}>◎ Dashed = Score zones</Text>
-          <Text style={styles.legendItem}>⬤ Solid = AQI stations</Text>
-          <Text style={styles.legendItem}>■ Square = Waste reports</Text>
-          <Text style={styles.legendItem}>📍 Pin = Eco points</Text>
-          <Text style={styles.legendItem}>━━ Blue line = Route</Text>
-          <Text style={styles.legendSection}>Tips</Text>
-          <Text style={styles.legendItem}>Tap chip → toggle layer</Text>
-          <Text style={styles.legendItem}>Long press → focus mode</Text>
-          <Text style={styles.legendItem}>Click map → report waste</Text>
-          <Text style={styles.legendItem}>Click ♻️ → get route</Text>
-        </View>
-      )}
-
-      <Modal visible={reportModal} transparent animationType="slide" onRequestClose={() => setReportModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>🗑️ {t('Report Waste')}</Text>
-            <Text style={styles.modalCoords}>📍 {reportLat.toFixed(5)}, {reportLng.toFixed(5)}</Text>
-
-            <TouchableOpacity style={styles.imageUploadBtn} onPress={pickAndAnalyzeImage} disabled={analyzing}>
-              <Text style={styles.imageUploadText}>
-                {analyzing ? '🤖 AI Analyzing...' : '📷 Upload Photo — AI auto-fills fields'}
-              </Text>
-            </TouchableOpacity>
-
-            {analyzing && <ActivityIndicator color="#22c55e" style={{ marginBottom: 8 }} />}
-
-            {selectedImage && (
-              <View style={styles.imagePreview}>
-                <Image source={{ uri: selectedImage }} style={{ width: '100%', height: 120, borderRadius: 8 }} resizeMode="cover" />
-                <TouchableOpacity style={styles.removeImage} onPress={() => setSelectedImage(null)}>
-                  <Text style={{ color: '#fff', fontSize: 11 }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <Text style={styles.label}>{t('Title')} *</Text>
-            <TextInput style={styles.input} placeholder="e.g. Garbage pile near river" placeholderTextColor="#555" value={title} onChangeText={setTitle} />
-
-            <Text style={styles.label}>{t('Category')}</Text>
-            <View style={styles.chips}>
-              {CATEGORIES.map(c => (
-                <TouchableOpacity key={c.id} style={[styles.chip, category === c.id && { backgroundColor: c.color, borderColor: c.color }]} onPress={() => setCategory(c.id)}>
-                  <Text style={[styles.chipText, category === c.id && { color: '#fff' }]}>{c.label}</Text>
-                </TouchableOpacity>
+              {/* Crop suitability */}
+              <div style={{ color: '#7fba00', fontWeight: 'bold', marginBottom: '8px', fontSize: '11px' }}>
+                CROP SUITABILITY (LIVE)
+              </div>
+              {cropSuitability.map((crop, i) => (
+                <div key={i} style={{ marginBottom: '7px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '12px' }}>{crop.crop}</span>
+                    <span style={{ color: getSuitabilityColor(crop.suitability), fontWeight: 'bold' }}>
+                      {crop.suitability}%
+                    </span>
+                  </div>
+                  <div style={{ background: '#1a3a1a', borderRadius: '3px', height: '4px', marginTop: '3px' }}>
+                    <div style={{ background: getSuitabilityColor(crop.suitability), height: '4px', borderRadius: '3px', width: `${crop.suitability}%` }} />
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{crop.reason}</div>
+                </div>
               ))}
-            </View>
 
-            <Text style={styles.label}>{t('Description')}</Text>
-            <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} placeholder="Describe the waste situation..." placeholderTextColor="#555" value={description} onChangeText={setDescription} multiline />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setReportModal(false); setSelectedImage(null); }}>
-                <Text style={styles.cancelText}>{t('Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={submitReport} disabled={submitting}>
-                <Text style={styles.submitText}>{submitting ? t('Submitting...') : '🚨 ' + t('Submit Report')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              <div style={{ marginTop: '8px', borderTop: '1px solid #1a3a1a', paddingTop: '8px', fontSize: '10px', color: '#555' }}>
+                Data: Open-Meteo API • Updated live
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <View style={styles.mobileContainer}>
+          <Text style={styles.mobileText}>Map view available on web only</Text>
+          {weatherData && (
+            <Text style={styles.mobileText}>
+              {(weatherData as WeatherData).temperature}°C, {(weatherData as WeatherData).humidity}% humidity
+            </Text>
+          )}
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
 
+function windDegToLabel(deg: number): string {
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
-  header: { backgroundColor: '#1a1a1a', padding: 14, paddingTop: 50, borderBottomWidth: 1, borderBottomColor: '#333' },
-  headerText: { fontSize: 18, fontWeight: 'bold', color: '#22c55e' },
-  headerSub: { fontSize: 11, color: '#888', marginTop: 2 },
-  layerBar: { backgroundColor: '#111', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#222' },
-  layerChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#333', backgroundColor: '#1a1a1a' },
-  layerChipText: { color: '#666', fontSize: 12, fontWeight: '600' },
-  focusBanner: { backgroundColor: '#1a1a1a', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#333' },
-  focusText: { color: '#f59e0b', fontSize: 12 },
-  focusExit: { color: '#888', fontSize: 16, paddingLeft: 12 },
-  mapContainer: { flex: 1 },
-  placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  placeholderText: { color: '#888' },
-  legendBtn: { position: 'absolute', bottom: 24, left: 16, backgroundColor: '#1a1a1a', borderRadius: 24, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333', zIndex: 100 },
-  legendBtnText: { fontSize: 20 },
-  legend: { position: 'absolute', bottom: 76, left: 16, backgroundColor: 'rgba(15,15,15,0.97)', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#333', zIndex: 100, maxWidth: 220 },
-  legendTitle: { color: '#22c55e', fontWeight: 'bold', fontSize: 13, marginBottom: 8 },
-  legendSection: { color: '#888', fontSize: 10, marginTop: 8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  legendItem: { color: '#ccc', fontSize: 11, marginBottom: 3, lineHeight: 16 },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
-  modalSheet: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#333' },
-  modalHandle: { width: 40, height: 4, backgroundColor: '#444', borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#ef4444', marginBottom: 3 },
-  modalCoords: { fontSize: 11, color: '#888', marginBottom: 12 },
-  imageUploadBtn: { borderWidth: 1.5, borderColor: '#22c55e', borderStyle: 'dashed', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 10, backgroundColor: 'rgba(34,197,94,0.05)' },
-  imageUploadText: { color: '#22c55e', fontSize: 13, fontWeight: '600' },
-  imagePreview: { borderRadius: 8, overflow: 'hidden', marginBottom: 10, position: 'relative' },
-  removeImage: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
-  label: { color: '#888', fontSize: 12, marginBottom: 5, marginTop: 10 },
-  input: { backgroundColor: '#0f0f0f', color: '#fff', borderRadius: 10, padding: 11, fontSize: 14, borderWidth: 1, borderColor: '#333' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  chip: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#333', backgroundColor: '#0f0f0f' },
-  chipText: { color: '#888', fontSize: 12 },
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  cancelBtn: { flex: 1, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
-  cancelText: { color: '#888', fontSize: 14 },
-  submitBtn: { flex: 2, backgroundColor: '#ef4444', padding: 13, borderRadius: 12, alignItems: 'center' },
-  submitText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: '#000' },
+  mobileContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a140a' },
+  mobileText: { color: '#7fba00', fontSize: 14, marginVertical: 10, textAlign: 'center', fontFamily: 'monospace' },
 });
+
+export default AgriculturalMap;

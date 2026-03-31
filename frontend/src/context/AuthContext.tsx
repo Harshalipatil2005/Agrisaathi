@@ -1,22 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
 import { router } from 'expo-router';
-
-const API = 'http://127.0.0.1:8000';
 
 interface User {
   id: string;
   email: string;
   role: string;
   token: string;
-  refresh_token?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, full_name: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
   getValidToken: () => Promise<string | null>;
@@ -33,40 +28,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRef.current = user;
   }, [user]);
 
-  // Load user from storage on app start
+  // 🔥 AUTO LOGIN (no backend)
   useEffect(() => {
-    AsyncStorage.getItem('user').then(data => {
+    const loadUser = async () => {
+      const data = await AsyncStorage.getItem('user');
+
       if (data) {
         const parsed = JSON.parse(data);
         setUser(parsed);
         userRef.current = parsed;
-      }
-      setLoading(false);
-    });
-  }, []);
+      } else {
+        // 👉 Default fake user (you can switch role here)
+        const fakeUser: User = {
+          id: "user-1",
+          email: "patilharshali2732@gmail.com",
+          role: "user", // change to "seller" if needed
+          token: "fake-token",
+        };
 
-  // Auto refresh token every 45 minutes
-  useEffect(() => {
-    if (!user) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.post(`${API}/auth/refresh`, {
-          token: user.token
-        });
-        if (res.data.access_token) {
-          const updated = { ...user, token: res.data.access_token };
-          await AsyncStorage.setItem('user', JSON.stringify(updated));
-          setUser(updated);
-          userRef.current = updated;
-          console.log('Token refreshed!');
-        }
-      } catch (e) {
-        console.log('Token refresh failed, logging out');
-        await doLogout();
+        await AsyncStorage.setItem('user', JSON.stringify(fakeUser));
+        setUser(fakeUser);
+        userRef.current = fakeUser;
       }
-    }, 45 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [user]);
+
+      setLoading(false);
+    };
+
+    loadUser();
+  }, []);
 
   const saveUser = async (userData: User) => {
     await AsyncStorage.setItem('user', JSON.stringify(userData));
@@ -74,68 +63,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRef.current = userData;
   };
 
+  // 🔥 SIMPLE TOKEN (no JWT logic)
   const getValidToken = async (): Promise<string | null> => {
-    const current = userRef.current;
-    if (!current) return null;
-
-    try {
-      const payload = JSON.parse(atob(current.token.split('.')[1]));
-      const expiry = payload.exp * 1000;
-      const isExpired = Date.now() >= expiry - 60000;
-
-      if (!isExpired) return current.token;
-
-      console.log('Token expired, refreshing...');
-      const res = await axios.post(`${API}/auth/refresh`, {
-        token: current.token
-      });
-
-      const updated: User = {
-        ...current,
-        token: res.data.access_token,
-      };
-      await saveUser(updated);
-      console.log('Token refreshed!');
-      return updated.token;
-
-    } catch (e) {
-      console.log('Token refresh failed, logging out:', e);
-      await doLogout();
-      return null;
-    }
+    return userRef.current?.token || null;
   };
 
+  // 🔥 FAKE LOGIN
   const login = async (email: string, password: string) => {
-    const res = await axios.post(`${API}/auth/login`, { email, password });
-    const userData: User = {
-      id: res.data.user_id,
-      email: res.data.email,
-      role: res.data.role,
-      token: res.data.access_token,
-      refresh_token: res.data.refresh_token,
-    };
-    await saveUser(userData);
+    let fakeUser: User | null = null;
+
+    if (email === "patilharshali2732@gmail.com") {
+      fakeUser = {
+        id: "user-1",
+        email,
+        role: "user",
+        token: "fake-token",
+      };
+    } else if (email === "harshuuu.2732@gmail.com") {
+      fakeUser = {
+        id: "seller-1",
+        email,
+        role: "seller",
+        token: "fake-token",
+      };
+    } else {
+      throw new Error("Invalid user");
+    }
+
+    await saveUser(fakeUser);
   };
 
-  const register = async (email: string, password: string, full_name: string) => {
-    await axios.post(`${API}/auth/register`, { email, password, full_name });
-  };
-
-  // Internal logout — clears state and redirects
-  const doLogout = async () => {
+  const logout = async () => {
     await AsyncStorage.removeItem('user');
     setUser(null);
     userRef.current = null;
     router.replace('/login' as any);
   };
 
-  // Public logout — same thing
-  const logout = async () => {
-    await doLogout();
-  };
-
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, getValidToken }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, getValidToken }}>
       {children}
     </AuthContext.Provider>
   );

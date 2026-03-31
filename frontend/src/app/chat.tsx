@@ -2,46 +2,49 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert
+  KeyboardAvoidingView, Platform, Alert, Modal
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useT } from '../hooks/useT';
 
 const API = 'http://127.0.0.1:8000';
 
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+
+const C = {
+  sage:         '#4a7c59',
+  sageMid:      '#b5d9bf',
+  sageLight:    '#e8f5ec',
+  sageDark:     '#2d5a3d',
+  straw:        '#f5e6a3',
+  strawMid:     '#e8c84a',
+  strawDark:    '#7a6210',
+  sky:          '#bde0f5',
+  skyMid:       '#5bacd4',
+  skyDark:      '#1e5f82',
+  clay:         '#e8a87c',
+  clayLight:    '#fdf0e6',
+  clayDark:     '#7a3d15',
+  cream:        '#faf7f0',
+  parchment:    '#f0ead8',
+  ink:          '#2c2416',
+  inkMid:       '#5a4f3c',
+  inkSoft:      '#8a7d68',
+  white:        '#ffffff',
+  border:       'rgba(74,124,89,0.18)',
+  red:          '#c0392b',
+  redLight:     'rgba(192,57,43,0.12)',
+  redBorder:    '#e8a87c',
+  purple:       '#7c5cbf',
+  purpleLight:  'rgba(124,92,191,0.12)',
+  purpleBorder: '#c4aee8',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-}
-
-// Browser TTS — speaks the reply aloud
-function speakText(text: string, lang: string) {
-  if (Platform.OS !== 'web') return;
-  if (!('speechSynthesis' in window)) return;
-
-  window.speechSynthesis.cancel(); // stop any ongoing speech
-
-  const clean = text.replace(/[*#_`~]/g, '').trim(); // strip markdown
-  const utterance = new SpeechSynthesisUtterance(clean);
-
-  // Pick voice language
-  const langMap: Record<string, string> = {
-    en: 'en-IN',
-    hi: 'hi-IN',
-    mr: 'mr-IN',
-  };
-  utterance.lang = langMap[lang] || 'en-IN';
-  utterance.rate = 0.95;
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-
-  // Try to find a matching voice
-  const voices = window.speechSynthesis.getVoices();
-  const match = voices.find(v => v.lang.startsWith(utterance.lang.split('-')[0]));
-  if (match) utterance.voice = match;
-
-  window.speechSynthesis.speak(utterance);
 }
 
 function stopSpeaking() {
@@ -49,83 +52,74 @@ function stopSpeaking() {
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function ChatScreen() {
-  const { user, getValidToken } = useAuth();
-  const { language } = useLanguage();
+  const { language, changeLanguage } = useLanguage();
   const t = useT();
 
   const langNames: Record<string, string> = {
     en: 'English', hi: 'Hindi', mr: 'Marathi'
   };
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [displayMessages, setDisplayMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: '🌱 Hi! I am EcoBot, your sustainability assistant. Ask me anything about environment, recycling, carbon footprint, or tap 🎤 to speak!'
-    }
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState(false);
+  const languages = [
+    { code: 'en', label: 'English',  flag: '🇬🇧' },
+    { code: 'hi', label: 'हिन्दी', flag: '🇮🇳' },
+    { code: 'mr', label: 'मराठी',   flag: '🇮🇳' },
+  ];
 
-  // Voice states
-  const [recording, setRecording] = useState(false);
+  const [messages, setMessages]               = useState<Message[]>([]);
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([{
+    role: 'assistant',
+    content: 'Namaste! I am your Agricultural Advisor. Ask me about crops, soil, pests, water, equipment, schemes, or weather. You can also tap 🎤 to speak!',
+  }]);
+  const [input, setInput]           = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [streaming, setStreaming]   = useState(false);
+  const [recording, setRecording]   = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [voiceReply, setVoiceReply] = useState(false); // auto-speak replies
-  const [speaking, setSpeaking] = useState(false);
+  const [voiceReply, setVoiceReply] = useState(false);
+  const [speaking, setSpeaking]     = useState(false);
+  const [showLangModal, setShowLangModal] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const scrollRef = useRef<ScrollView>(null);
+  const audioChunksRef   = useRef<Blob[]>([]);
+  const scrollRef        = useRef<ScrollView>(null);
 
-  // Load voices on mount (browser needs this)
   useEffect(() => {
     if (Platform.OS === 'web' && 'speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
+      const loadVoices = () => { window.speechSynthesis.getVoices(); };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
     }
     return () => stopSpeaking();
   }, []);
 
-  // ── VOICE INPUT ─────────────────────────────────────────────
+  // ── Voice Input ──────────────────────────────────────────────
+
   const startRecording = async () => {
     if (Platform.OS !== 'web') {
       Alert.alert('Voice input is available on web only');
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-
-      // Use webm if supported, otherwise ogg
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/ogg';
-
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
       const recorder = new MediaRecorder(stream, { mimeType });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         await transcribeAudio(blob, mimeType);
       };
-
       recorder.start();
       mediaRecorderRef.current = recorder;
       setRecording(true);
-    } catch (err) {
+    } catch {
       Alert.alert('Microphone Error', 'Could not access microphone. Allow mic permission and try again.');
-      console.log('Mic error:', err);
     }
   };
 
@@ -139,112 +133,126 @@ export default function ChatScreen() {
 
   const transcribeAudio = async (blob: Blob, mimeType: string) => {
     try {
-      const freshToken = await getValidToken();
       const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
       const formData = new FormData();
       formData.append('file', blob, `recording.${ext}`);
-
-      const res = await fetch(`${API}/chat/transcribe`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${freshToken}` },
-        body: formData
-      });
-
+      const res = await fetch(`${API}/chat/transcribe`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).detail ?? `Server error ${res.status}`);
+      }
       const data = await res.json();
-      console.log('Transcription:', data);
-
       if (data.text) {
         setInput(data.text);
-        // Auto-send after transcription
         setTimeout(() => sendMessageWithText(data.text), 300);
       } else {
         Alert.alert('Could not transcribe', 'Please try again or type your message.');
       }
-    } catch (err) {
-      console.log('Transcribe error:', err);
-      Alert.alert('Transcription failed', 'Please type your message instead.');
+    } catch (err: any) {
+      Alert.alert('Transcription failed', err.message ?? 'Please type your message instead.');
     } finally {
       setTranscribing(false);
     }
   };
 
-  // ── VOICE OUTPUT ─────────────────────────────────────────────
-  const speakReply = (text: string) => {
+  // ── Voice Output ─────────────────────────────────────────────
+
+  const speakReply = async (text: string) => {
     setSpeaking(true);
     stopSpeaking();
 
-    if (Platform.OS === 'web' && 'speechSynthesis' in window) {
-      const clean = text.replace(/[*#_`~]/g, '').trim();
-      const utterance = new SpeechSynthesisUtterance(clean);
-      const langMap: Record<string, string> = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' };
-      utterance.lang = langMap[language] || 'en-IN';
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.startsWith(utterance.lang.split('-')[0]));
-      if (match) utterance.voice = match;
-
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    } else {
+    if (Platform.OS !== 'web' || !('speechSynthesis' in window)) {
       setSpeaking(false);
+      return;
     }
+
+    const clean = text.replace(/[*#_`~]/g, '').trim();
+    const utterance = new SpeechSynthesisUtterance(clean);
+
+    // Map app language codes → BCP-47 tags
+    const langMap: Record<string, string> = {
+      en: 'en-IN',
+      hi: 'hi-IN',
+      mr: 'mr-IN',
+    };
+    utterance.lang   = langMap[language] ?? 'en-IN';
+    utterance.rate   = language === 'en' ? 0.95 : 0.85;  // slightly slower for Indic scripts
+    utterance.pitch  = 1.0;
+    utterance.volume = 1.0;
+
+    // Give the browser time to populate voices (needed on first load)
+    const getVoices = (): Promise<SpeechSynthesisVoice[]> =>
+      new Promise(resolve => {
+        let voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) { resolve(voices); return; }
+        window.speechSynthesis.onvoiceschanged = () => {
+          resolve(window.speechSynthesis.getVoices());
+        };
+      });
+
+    const voices = await getVoices();
+    const targetLang = utterance.lang;           // e.g. "hi-IN"
+    const targetCode = targetLang.split('-')[0]; // e.g. "hi"
+
+    // Tier 1 — exact match (e.g. "hi-IN")
+    let match = voices.find(v => v.lang === targetLang);
+
+    // Tier 2 — same language, any region (e.g. "hi-*")
+    if (!match) match = voices.find(v => v.lang.startsWith(targetCode + '-') || v.lang === targetCode);
+
+    // Tier 3 — for Marathi, fall back to Hindi voice (both Devanagari, reasonably intelligible)
+    if (!match && language === 'mr') {
+      match = voices.find(v => v.lang.startsWith('hi'));
+    }
+
+    // Tier 4 — any Indian voice (at least keeps the accent)
+    if (!match && language !== 'en') {
+      match = voices.find(v => v.lang.endsWith('-IN') || v.lang.endsWith('_IN'));
+    }
+
+    // Do NOT fall back to English for non-English languages.
+    // Set the voice only if we found one; leave it unset otherwise so the
+    // browser engine auto-selects the best available voice for utterance.lang.
+    if (match) utterance.voice = match;
+
+    utterance.onend  = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+
+    window.speechSynthesis.speak(utterance);
   };
 
-  const stopSpeakingNow = () => {
-    stopSpeaking();
-    setSpeaking(false);
-  };
+  const stopSpeakingNow = () => { stopSpeaking(); setSpeaking(false); };
 
-  // ── SEND MESSAGE ─────────────────────────────────────────────
+  // ── Send Message ─────────────────────────────────────────────
+
   const sendMessageWithText = async (text: string) => {
     if (!text.trim()) return;
     stopSpeaking();
-
     const newMessage: Message = { role: 'user', content: text };
     const updatedMessages = [...messages, newMessage];
     setMessages(updatedMessages);
     setDisplayMessages(prev => [...prev, { role: 'user', content: text }]);
     setInput('');
     setLoading(true);
-
     try {
-      const freshToken = await getValidToken();
       const res = await fetch(`${API}/chat/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${freshToken}`
-        },
-        body: JSON.stringify({
-          messages: updatedMessages,
-          language: langNames[language] || 'English'
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages, language: langNames[language] || 'English' }),
       });
-
-      if (!res.ok) throw new Error('Server error');
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       if (!res.body) throw new Error('No response body');
-
       setLoading(false);
       setStreaming(true);
-
       setDisplayMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullReply = '';
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
+        for (const line of chunk.split('\n')) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') break;
@@ -252,7 +260,6 @@ export default function ChatScreen() {
               const parsed = JSON.parse(data);
               const token = parsed.token || '';
               fullReply += token;
-
               setDisplayMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: 'assistant', content: fullReply };
@@ -263,19 +270,15 @@ export default function ChatScreen() {
           }
         }
       }
-
       setMessages(prev => [...prev, { role: 'assistant', content: fullReply }]);
-
-      // Auto-speak reply if voice mode is on
       if (voiceReply && fullReply) {
-        setTimeout(() => speakReply(fullReply), 300);
+        setTimeout(() => speakReply(fullReply).catch(() => {}), 300);
       }
-
-    } catch (e) {
+    } catch {
       setLoading(false);
       setDisplayMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Error connecting. Please try again.'
+        content: '❌ Error connecting. Please check the server is running.',
       }]);
     } finally {
       setLoading(false);
@@ -286,116 +289,178 @@ export default function ChatScreen() {
 
   const sendMessage = () => sendMessageWithText(input);
 
-  // ── RENDER ────────────────────────────────────────────────────
+  const handleLanguageChange = async (code: string) => {
+    await changeLanguage(code);
+    setShowLangModal(false);
+  };
+
+  // ── Render ────────────────────────────────────────────────────
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={s.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.headerText}>🌱 {t('EcoBot')}</Text>
-            <Text style={styles.headerSub}>{t('AI Sustainability Assistant')}</Text>
+      {/* ── Language Modal ── */}
+      <Modal
+        visible={showLangModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLangModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <View style={s.modalLeaf} />
+              <Text style={s.modalTitle}>{t('Select Language')}</Text>
+            </View>
+            {languages.map(lang => (
+              <TouchableOpacity
+                key={lang.code}
+                style={[s.langOption, language === lang.code && s.langOptionActive]}
+                onPress={() => handleLanguageChange(lang.code)}
+                activeOpacity={0.75}
+              >
+                <Text style={s.langOptionText}>{lang.flag}  {lang.label}</Text>
+                {language === lang.code && (
+                  <View style={s.checkPill}>
+                    <Text style={s.checkText}>✓</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={s.closeModalBtn} onPress={() => setShowLangModal(false)} activeOpacity={0.85}>
+              <Text style={s.closeModalText}>{t('Close')}</Text>
+            </TouchableOpacity>
           </View>
-          {/* Voice reply toggle */}
-          <TouchableOpacity
-            style={[styles.voiceToggle, voiceReply && styles.voiceToggleOn]}
-            onPress={() => {
-              if (voiceReply) stopSpeakingNow();
-              setVoiceReply(v => !v);
-            }}
-          >
-            <Text style={styles.voiceToggleText}>{voiceReply ? '🔊 ON' : '🔇 OFF'}</Text>
-          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <View style={s.headerInner}>
+          <View style={s.headerLeft}>
+            <View style={s.headerBadge}>
+              <View style={s.headerBadgeDot} />
+              <Text style={s.headerBadgeText}>AGRI ADVISOR</Text>
+            </View>
+            <Text style={s.headerTitle}>{t('Farming Advisor')}</Text>
+            <Text style={s.headerSub}>{t('Expert Agricultural Assistant')}</Text>
+          </View>
+          <View style={s.headerActions}>
+            <TouchableOpacity style={s.langBtn} onPress={() => setShowLangModal(true)} activeOpacity={0.8}>
+              <Text style={s.langBtnText}>
+                {languages.find(l => l.code === language)?.flag}  {language.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.voiceToggle, voiceReply && s.voiceToggleOn]}
+              onPress={() => {
+                const next = !voiceReply;
+                if (voiceReply) stopSpeakingNow();
+                setVoiceReply(next);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.voiceToggleText, voiceReply && s.voiceToggleTextOn]}>
+                {voiceReply ? '🔊 ON' : '🔇 OFF'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      {/* Messages */}
+      {/* ── Messages ── */}
       <ScrollView
         ref={scrollRef}
-        style={styles.messages}
-        contentContainerStyle={{ padding: 16 }}
+        style={s.messages}
+        contentContainerStyle={s.messagesContent}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        showsVerticalScrollIndicator={false}
       >
-        {displayMessages.map((msg, i) => (
-          <View key={i} style={styles.messageRow}>
-            <View style={[styles.bubble, msg.role === 'user' ? styles.userBubble : styles.botBubble]}>
-              <Text style={[styles.bubbleText, msg.role === 'user' ? styles.userText : styles.botText]}>
-                {msg.content}
-                {streaming && i === displayMessages.length - 1 && (
-                  <Text style={styles.cursor}>▋</Text>
-                )}
-              </Text>
+        {displayMessages.map((msg, i) => {
+          const isUser = msg.role === 'user';
+          const isLastStreaming = streaming && i === displayMessages.length - 1;
+          return (
+            <View key={i} style={[s.messageRow, isUser ? s.messageRowUser : s.messageRowBot]}>
+              {!isUser && (
+                <View style={s.avatar}>
+                  <Text style={s.avatarText}></Text>
+                </View>
+              )}
+              <View style={[s.bubble, isUser ? s.bubbleUser : s.bubbleBot]}>
+                <Text style={[s.bubbleText, isUser ? s.bubbleTextUser : s.bubbleTextBot]}>
+                  {msg.content}
+                  {isLastStreaming && <Text style={s.cursor}>▋</Text>}
+                </Text>
+              </View>
+              {isUser && (
+                <View style={s.avatarUser}>
+                  <Text style={s.avatarUserText}>👤</Text>
+                </View>
+              )}
+              {!isUser && msg.content.length > 0 && !streaming && (
+                <TouchableOpacity
+                  style={s.speakBtn}
+                  onPress={() => speaking ? stopSpeakingNow() : speakReply(msg.content).catch(() => {})}
+                  activeOpacity={0.75}
+                >
+                  <Text style={s.speakBtnText}>{speaking ? '⏹' : '🔊'}</Text>
+                </TouchableOpacity>
+              )}
             </View>
-
-            {/* Speak button on assistant messages */}
-            {msg.role === 'assistant' && msg.content.length > 0 && !streaming && (
-              <TouchableOpacity
-                style={styles.speakBtn}
-                onPress={() => {
-                  if (speaking) {
-                    stopSpeakingNow();
-                  } else {
-                    speakReply(msg.content);
-                  }
-                }}
-              >
-                <Text style={styles.speakBtnText}>{speaking ? '⏹️' : '🔊'}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ))}
+          );
+        })}
 
         {loading && (
-          <View style={styles.botBubble}>
-            <View style={styles.typingDots}>
-              <ActivityIndicator size="small" color="#22c55e" />
-              <Text style={styles.typingText}> {t('EcoBot is thinking...')}</Text>
+          <View style={[s.messageRow, s.messageRowBot]}>
+            <View style={s.avatar}><Text style={s.avatarText}></Text></View>
+            <View style={[s.bubble, s.bubbleBot, s.bubbleTyping]}>
+              <ActivityIndicator size="small" color={C.sage} />
+              <Text style={s.typingText}>  {t('Advisor is thinking...')}</Text>
             </View>
           </View>
         )}
-
         {transcribing && (
-          <View style={styles.botBubble}>
-            <View style={styles.typingDots}>
-              <ActivityIndicator size="small" color="#8b5cf6" />
-              <Text style={styles.typingText}> Transcribing your voice...</Text>
+          <View style={[s.messageRow, s.messageRowBot]}>
+            <View style={s.avatar}><Text style={s.avatarText}></Text></View>
+            <View style={[s.bubble, s.bubbleBot, s.bubbleTyping]}>
+              <ActivityIndicator size="small" color={C.purple} />
+              <Text style={[s.typingText, { color: C.purple }]}>  Transcribing your voice...</Text>
             </View>
           </View>
         )}
       </ScrollView>
 
-      {/* Recording indicator */}
+      {/* ── Recording Bar ── */}
       {recording && (
-        <View style={styles.recordingBar}>
-          <View style={styles.recordingDot} />
-          <Text style={styles.recordingText}>Recording... tap 🎤 to stop</Text>
+        <View style={s.recordingBar}>
+          <View style={s.recordingDot} />
+          <Text style={s.recordingText}>Recording… tap 🎤 to stop</Text>
         </View>
       )}
 
-      {/* Input row */}
-      <View style={styles.inputRow}>
-        {/* Mic button */}
+      {/* ── Input Row ── */}
+      <View style={s.inputRow}>
         <TouchableOpacity
           style={[
-            styles.micBtn,
-            recording && styles.micBtnActive,
-            transcribing && styles.micBtnTranscribing
+            s.micBtn,
+            recording    && s.micBtnRecording,
+            transcribing && s.micBtnTranscribing,
           ]}
           onPress={recording ? stopRecording : startRecording}
           disabled={transcribing || streaming || loading}
+          activeOpacity={0.8}
         >
-          <Text style={styles.micBtnText}>
-            {transcribing ? '⏳' : recording ? '⏹️' : '🎤'}
+          <Text style={s.micBtnText}>
+            {transcribing ? '⏳' : recording ? '⏹' : '🎤'}
           </Text>
         </TouchableOpacity>
 
         <TextInput
-          style={styles.input}
-          placeholder={t('Ask EcoBot...')}
-          placeholderTextColor="#888"
+          style={s.textInput}
+          placeholder={t('Ask your farming question...')}
+          placeholderTextColor={C.inkSoft}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={sendMessage}
@@ -404,95 +469,233 @@ export default function ChatScreen() {
         />
 
         <TouchableOpacity
-          style={[styles.sendBtn, (!input.trim() || streaming) && { opacity: 0.5 }]}
+          style={[s.sendBtn, (!input.trim() || streaming) && s.sendBtnDisabled]}
           onPress={sendMessage}
           disabled={!input.trim() || loading || streaming || recording}
+          activeOpacity={0.85}
         >
-          <Text style={styles.sendText}>{streaming ? '⏳' : '➤'}</Text>
+          <Text style={s.sendBtnText}>{streaming ? '⏳' : '➤'}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f0f' },
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.cream },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(44,36,22,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+  modalLeaf: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.sage },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: C.sageDark },
+  langOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: C.cream,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: C.border,
+  },
+  langOptionActive: { borderColor: C.sage, backgroundColor: C.sageLight },
+  langOptionText: { fontSize: 15, color: C.ink, fontWeight: '500' },
+  checkPill: {
+    backgroundColor: C.sage,
+    borderRadius: 100,
+    width: 22, height: 22,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  checkText: { color: C.white, fontSize: 12, fontWeight: '700' },
+  closeModalBtn: {
+    backgroundColor: C.sageDark,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  closeModalText: { color: C.white, fontSize: 14, fontWeight: '700' },
+
+  // Header
   header: {
-    backgroundColor: '#1a1a1a', padding: 20, paddingTop: 50,
-    borderBottomWidth: 1, borderBottomColor: '#333'
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    paddingTop: 50,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
   },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerText: { fontSize: 22, fontWeight: 'bold', color: '#22c55e' },
-  headerSub: { fontSize: 12, color: '#888', marginTop: 2 },
-
+  headerInner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  headerLeft: { flex: 1 },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: C.straw,
+    borderWidth: 1.5,
+    borderColor: C.strawMid,
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  headerBadgeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.strawMid },
+  headerBadgeText: { fontSize: 9, fontWeight: '700', color: C.strawDark, letterSpacing: 0.8 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: C.sageDark },
+  headerSub: { fontSize: 11, color: C.inkSoft, marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  langBtn: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: C.sageMid,
+    backgroundColor: C.sageLight,
+  },
+  langBtnText: { color: C.sageDark, fontSize: 11, fontWeight: '700' },
   voiceToggle: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
-    borderWidth: 1, borderColor: '#444', backgroundColor: '#0f0f0f'
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.parchment,
   },
-  voiceToggleOn: { borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)' },
-  voiceToggleText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  voiceToggleOn: { borderColor: C.sage, backgroundColor: C.sageLight },
+  voiceToggleText: { fontSize: 11, fontWeight: '700', color: C.inkMid },
+  voiceToggleTextOn: { color: C.sageDark },
 
+  // Messages
   messages: { flex: 1 },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 12 },
-  bubble: { maxWidth: '78%', borderRadius: 16, padding: 12 },
-  userBubble: { backgroundColor: '#22c55e', alignSelf: 'flex-end', borderBottomRightRadius: 4, marginLeft: 'auto' },
-  botBubble: {
-    backgroundColor: '#1a1a1a', alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: '#333', borderBottomLeftRadius: 4
+  messagesContent: { padding: 16, gap: 12 },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 7 },
+  messageRowUser: { justifyContent: 'flex-end' },
+  messageRowBot:  { justifyContent: 'flex-start' },
+
+  avatar: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: C.sageLight,
+    borderWidth: 1.5, borderColor: C.sageMid,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarText: { fontSize: 14 },
+  avatarUser: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: C.straw,
+    borderWidth: 1.5, borderColor: C.strawMid,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarUserText: { fontSize: 13 },
+
+  bubble: { maxWidth: '72%', borderRadius: 16, padding: 12 },
+  bubbleUser: {
+    backgroundColor: C.sage,
+    borderBottomRightRadius: 4,
+  },
+  bubbleBot: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderBottomLeftRadius: 4,
+  },
+  bubbleTyping: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
   },
   bubbleText: { fontSize: 15, lineHeight: 22 },
-  userText: { color: '#fff' },
-  botText: { color: '#ddd' },
-  cursor: { color: '#22c55e', fontWeight: 'bold' },
+  bubbleTextUser: { color: C.white },
+  bubbleTextBot:  { color: C.ink },
+  cursor: { color: C.sage, fontWeight: '700' },
 
   speakBtn: {
-    marginLeft: 6, width: 32, height: 32, borderRadius: 16,
-    backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333',
-    justifyContent: 'center', alignItems: 'center'
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: C.sageLight,
+    borderWidth: 1, borderColor: C.sageMid,
+    justifyContent: 'center', alignItems: 'center',
+    marginLeft: 2,
   },
-  speakBtnText: { fontSize: 14 },
+  speakBtnText: { fontSize: 13 },
 
-  typingDots: { flexDirection: 'row', alignItems: 'center', padding: 4 },
-  typingText: { color: '#888', fontSize: 13 },
+  typingText: { fontSize: 13, color: C.inkSoft },
 
+  // Recording bar
   recordingBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(239,68,68,0.15)', paddingVertical: 8,
-    borderTopWidth: 1, borderTopColor: '#ef4444'
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.redLight,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.redBorder,
+    gap: 8,
   },
-  recordingDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#ef4444', marginRight: 8
-  },
-  recordingText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+  recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.red },
+  recordingText: { color: C.red, fontSize: 13, fontWeight: '600' },
 
+  // Input row
   inputRow: {
-    flexDirection: 'row', padding: 12, borderTopWidth: 1,
-    borderTopColor: '#333', backgroundColor: '#1a1a1a', alignItems: 'flex-end'
+    flexDirection: 'row',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    backgroundColor: C.white,
+    alignItems: 'flex-end',
+    gap: 8,
   },
-
   micBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#1f2937', borderWidth: 1, borderColor: '#374151',
-    justifyContent: 'center', alignItems: 'center', marginRight: 8
+    width: 44, height: 44,
+    borderRadius: 22,
+    backgroundColor: C.sageLight,
+    borderWidth: 1.5, borderColor: C.sageMid,
+    justifyContent: 'center', alignItems: 'center',
   },
-  micBtnActive: {
-    backgroundColor: 'rgba(239,68,68,0.2)', borderColor: '#ef4444'
+  micBtnRecording: {
+    backgroundColor: C.redLight,
+    borderColor: C.red,
   },
   micBtnTranscribing: {
-    backgroundColor: 'rgba(139,92,246,0.2)', borderColor: '#8b5cf6'
+    backgroundColor: C.purpleLight,
+    borderColor: C.purpleBorder,
   },
   micBtnText: { fontSize: 20 },
 
-  input: {
-    flex: 1, backgroundColor: '#0f0f0f', color: '#fff', borderRadius: 24,
-    paddingHorizontal: 16, paddingVertical: 10, fontSize: 15,
-    borderWidth: 1, borderColor: '#333', maxHeight: 100
+  textInput: {
+    flex: 1,
+    backgroundColor: C.cream,
+    color: C.ink,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    borderWidth: 1.5,
+    borderColor: C.sageMid,
+    maxHeight: 100,
   },
   sendBtn: {
-    backgroundColor: '#22c55e', borderRadius: 24, width: 44, height: 44,
-    justifyContent: 'center', alignItems: 'center', marginLeft: 8
+    width: 44, height: 44,
+    borderRadius: 22,
+    backgroundColor: C.sageDark,
+    justifyContent: 'center', alignItems: 'center',
   },
-  sendText: { color: '#fff', fontSize: 18 },
+  sendBtnDisabled: { opacity: 0.45 },
+  sendBtnText: { color: C.white, fontSize: 18 },
 });

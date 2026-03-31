@@ -1,63 +1,37 @@
-from fastapi import APIRouter, HTTPException
-from app.database import supabase, supabase_admin
-from app.models.schemas import RegisterRequest, LoginRequest
-from pydantic import BaseModel
+from fastapi import Header, HTTPException, Depends
+from app.database import supabase_admin
+from fastapi import APIRouter
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter()
 
-class RefreshRequest(BaseModel):
-    token: str
+async def get_current_user(authorization: str = Header(...)):
+    """
+    Extracts and verifies the Supabase JWT from the Authorization header.
+    Returns the user dict from auth.users.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
 
-@router.post("/register")
-async def register(body: RegisterRequest):
+    token = authorization.removeprefix("Bearer ").strip()
+
     try:
-        res = supabase.auth.sign_up({
-            "email": body.email,
-            "password": body.password,
-            "options": {
-                "data": {"full_name": body.full_name}
-            }
-        })
-        return {"message": "Registered!", "user": res.user}
-    except Exception as e:
-        print("REGISTER ERROR:", str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+        response = supabase_admin.auth.get_user(token)
+        if not response or not response.user:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return response.user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
 
-@router.post("/login")
-async def login(body: LoginRequest):
-    try:
-        # Single call — login + get session
-        res = supabase.auth.sign_in_with_password({
-            "email": body.email,
-            "password": body.password
-        })
 
-        # Get role from profile using admin client (bypasses RLS — faster)
-        profile = supabase_admin.table("profiles")\
-            .select("role")\
-            .eq("id", res.user.id)\
-            .single()\
-            .execute()
-
-        return {
-            "access_token": res.session.access_token,
-            "refresh_token": res.session.refresh_token,
-            "user_id": res.user.id,
-            "email": res.user.email,
-            "role": profile.data["role"]
-        }
-    except Exception as e:
-        print("LOGIN ERROR:", str(e))
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-@router.post("/refresh")
-async def refresh_token(body: RefreshRequest):
-    try:
-        res = supabase.auth.refresh_session(body.token)
-        return {
-            "access_token": res.session.access_token,
-            "refresh_token": res.session.refresh_token,
-        }
-    except Exception as e:
-        print("REFRESH ERROR:", str(e))
-        raise HTTPException(status_code=401, detail="Session expired")
+async def require_admin(user=Depends(get_current_user)):
+    """Only allows users with role='admin' in the profiles table."""
+    res = (
+        supabase_admin.table("profiles")
+        .select("role")
+        .eq("id", str(user.id))
+        .single()
+        .execute()
+    )
+    if not res.data or res.data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API = 'http://127.0.0.1:8000';
@@ -21,74 +21,75 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState('en');
   const [cache, setCache] = useState<Record<string, string>>({});
   const [isTranslating, setIsTranslating] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     AsyncStorage.getItem('app_language').then(lang => {
-      if (lang && lang !== 'en') loadCache(lang);
-      else if (lang) setLanguage(lang);
+      if (lang && lang !== 'en') {
+        setLanguage(lang);
+        loadCache(lang);
+      } else if (lang) {
+        setLanguage(lang);
+      }
     });
   }, []);
 
   const loadCache = async (lang: string) => {
-    setLanguage(lang);
     const cached = await AsyncStorage.getItem(`cache_${lang}`);
     if (cached) setCache(JSON.parse(cached));
   };
 
+  const lazyTranslate = useCallback(async (text: string, lang: string) => {
+    if (!text || lang === 'en') return;
+    
+    try {
+      const res = await fetch(`${API}/chat/translate-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text, target_language: lang }),
+      });
+      const data = await res.json();
+      if (data.translated) {
+        setCache(prev => {
+          const newCache = { ...prev, [text]: data.translated };
+          AsyncStorage.setItem(`cache_${lang}`, JSON.stringify(newCache));
+          // Trigger re-renders by incrementing refresh counter
+          setRefreshTrigger(t => t + 1);
+          return newCache;
+        });
+      }
+    } catch (e) {
+      console.log('Translation error:', e);
+    }
+  }, []);
+
   const changeLanguage = async (lang: string) => {
-    await AsyncStorage.setItem('app_language', lang);
     setLanguage(lang);
+    await AsyncStorage.setItem('app_language', lang);
 
     if (lang === 'en') {
       setCache({});
+      setRefreshTrigger(t => t + 1);
       return;
     }
 
-    // Get all text currently cached + any new text
     const existingCache = await AsyncStorage.getItem(`cache_${lang}`);
     if (existingCache) {
       setCache(JSON.parse(existingCache));
-      return;
+    } else {
+      setCache({});
     }
-
-    // Fresh translation — will happen lazily as user navigates
-    setCache({});
+    setRefreshTrigger(t => t + 1);
   };
 
-  // This is called for every UI string
-  const translate = (text: string): string => {
+  const translate = useCallback((text: string): string => {
     if (language === 'en' || !text) return text;
-    // Return cached if available
     if (cache[text]) return cache[text];
-    // Trigger lazy translation in background
-    lazyTranslate(text);
-    return text; // show English while translating
-  };
-
-  const lazyTranslate = async (text: string, token?: string) => {
-  if (cache[text] || language === 'en') return;
-
-  try {
-    const res = await fetch(`${API}/chat/translate-text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // No auth needed — make translate-text public
-      },
-      body: JSON.stringify({ text, target_language: language }),
-    });
-    const data = await res.json();
-    if (data.translated) {
-      setCache(prev => {
-        const newCache = { ...prev, [text]: data.translated };
-        AsyncStorage.setItem(`cache_${language}`, JSON.stringify(newCache));
-        return newCache;
-      });
-    }
-  } catch (e) {
-    console.log('Translation error:', e);
-  }
-};
+    lazyTranslate(text, language);
+    return text;
+  }, [language, cache, lazyTranslate, refreshTrigger]);
 
   return (
     <LanguageContext.Provider value={{ translate, changeLanguage, language, isTranslating }}>

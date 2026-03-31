@@ -14,7 +14,20 @@ import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+// ─── Local Theme Constants ─────────────────────────────────────────
+const Colors: Record<string, any> = {
+  light: { text: '#000', background: '#fff' },
+  dark: { text: '#fff', background: '#000' },
+};
+
+const Spacing = {
+  one: 4,
+  two: 8,
+  three: 12,
+  five: 20,
+};
+
+const MaxContentWidth = 1200;
 
 export default function AppTabs() {
   return (
@@ -24,9 +37,6 @@ export default function AppTabs() {
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
             <TabButton>Home</TabButton>
-          </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
