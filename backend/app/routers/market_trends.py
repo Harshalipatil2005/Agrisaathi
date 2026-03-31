@@ -46,6 +46,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"  # mixtral-8x7b-32768 was deprecated by Groq
 
+
 # Startup check — will print in your terminal when the server starts
 if not GROQ_API_KEY:
     print("⚠️  WARNING: GROQ_API_KEY is not set! Market Trends endpoints will fail.")
@@ -133,6 +134,8 @@ Use realistic Indian mandi prices. If exact data is unavailable, use historical 
         return extract_json(content)
     except (ValueError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse Groq response: {e}")
+
+DATAGOV_KEY = os.getenv("DATAGOV_KEY")
 
 
 @router.post("/get-prices", response_model=CropPrice)
